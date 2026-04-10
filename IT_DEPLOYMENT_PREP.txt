@@ -1,0 +1,1287 @@
+════════════════════════════════════════════════════════════════════════════════
+          PACIOLI — GUÍA DE PREPARACIÓN PARA DESPLIEGUE EN SERVIDOR
+                     Documento para reunión con IT
+════════════════════════════════════════════════════════════════════════════════
+
+Fecha de preparación: Abril 2026
+Sistema: PACIOLI — Sistema de Conciliación Bancaria Automatizada
+Estado: Producción — actualmente desplegado en entorno local de desarrollo
+
+
+════════════════════════════════════════════════════════════════════════════════
+SECCIÓN 1: PREGUNTAS PARA EL DEPARTAMENTO DE IT
+════════════════════════════════════════════════════════════════════════════════
+
+Cada pregunta incluye: la pregunta exacta, por qué importa para PACIOLI,
+la respuesta ideal, y qué hacer si la respuesta no es ideal.
+
+
+────────────────────────────────────────────────────────────────────────────────
+PREGUNTA 1: Sistema operativo del servidor
+────────────────────────────────────────────────────────────────────────────────
+
+PREGUNTA:
+  "¿Qué sistema operativo y versión tiene la instancia/servidor que nos
+   van a asignar? ¿Es Windows Server o Linux? ¿Qué versión específica?"
+
+POR QUÉ IMPORTA PARA PACIOLI:
+  PACIOLI tiene un componente escrito en Rust (pacioli_core) que se compila
+  como una librería nativa (.pyd en Windows, .so en Linux). El proceso de
+  compilación y las dependencias cambian según el OS. Además, Docker funciona
+  de forma nativa en Linux pero requiere WSL2 o Docker Desktop en Windows.
+
+RESPUESTA IDEAL:
+  Linux (Ubuntu 22.04 LTS o similar). Es el entorno más sencillo para
+  desplegar las tres capas de PACIOLI (Node.js, Python, PostgreSQL) y
+  Docker funciona nativamente sin overhead adicional.
+
+SI LA RESPUESTA NO ES IDEAL:
+  - Windows Server 2019/2022: Funciona, pero necesitamos WSL2 habilitado
+    o Docker Desktop for Windows. La compilación de Rust requiere
+    Visual Studio Build Tools (C++ workload). Preguntar si se puede
+    instalar.
+  - Windows Server 2016 o anterior: No soporta WSL2 ni Docker Desktop.
+    PACIOLI puede ejecutarse sin Docker (procesos nativos), pero complica
+    el mantenimiento. Negociar una versión más reciente.
+
+
+────────────────────────────────────────────────────────────────────────────────
+PREGUNTA 2: Recursos de hardware disponibles
+────────────────────────────────────────────────────────────────────────────────
+
+PREGUNTA:
+  "¿Cuántos recursos tiene asignada la instancia? Específicamente:
+   - Núcleos de CPU
+   - Memoria RAM
+   - Espacio en disco
+   ¿Estos recursos son dedicados o compartidos con otras aplicaciones?"
+
+POR QUÉ IMPORTA PARA PACIOLI:
+  PACIOLI ejecuta tres servicios simultáneamente:
+  - Node.js API (Express): Maneja peticiones HTTP de los analistas
+  - Python Pipeline (FastAPI + pandas): Procesa datos de ~18 tablas con
+    operaciones de merge, agrupación y matching algorítmico
+  - PostgreSQL: Base de datos con 5 esquemas y consultas JOIN intensivas
+
+  El pipeline de Python es el proceso más demandante: carga DataFrames de
+  pandas en memoria, ejecuta algoritmos de subset-sum en Rust, y escribe
+  resultados a PostgreSQL — todo en ~44 segundos.
+
+RESPUESTA IDEAL:
+  - CPU: 4 núcleos dedicados (mínimo 2)
+  - RAM: 8 GB dedicados (mínimo 4 GB)
+  - Disco: 50 GB SSD (mínimo 20 GB)
+  Los recursos deben ser dedicados, no compartidos.
+
+SI LA RESPUESTA NO ES IDEAL:
+  - 2 núcleos / 4 GB RAM: Funciona para operación normal, pero el pipeline
+    de Python será más lento (~90 segundos en vez de ~44). Aceptable para
+    un equipo pequeño (5-7 analistas).
+  - 1 núcleo / 2 GB RAM: Insuficiente. El pipeline podría fallar por
+    falta de memoria al procesar meses con alto volumen. Solicitar al
+    menos 4 GB.
+  - Disco HDD (no SSD): PostgreSQL será notablemente más lento en las
+    consultas de reportes. Funcional pero con impacto en experiencia de
+    usuario.
+  - Recursos compartidos: Preguntar qué otras aplicaciones corren en el
+    mismo servidor. Si comparte con otro sistema de base de datos pesado,
+    podría haber contención de I/O.
+
+
+────────────────────────────────────────────────────────────────────────────────
+PREGUNTA 3: Disponibilidad de Docker
+────────────────────────────────────────────────────────────────────────────────
+
+PREGUNTA:
+  "¿Tienen Docker instalado en el servidor, o es posible instalarlo?
+   Si es Windows Server, ¿tienen WSL2 habilitado o Docker Desktop?"
+
+POR QUÉ IMPORTA PARA PACIOLI:
+  Docker permite empaquetar PACIOLI y todas sus dependencias en contenedores
+  aislados. Sin Docker, cada componente (Node.js 20, Python 3.10+, Rust,
+  PostgreSQL 15+) debe instalarse manualmente en el servidor y mantenerse
+  actualizado. Docker simplifica esto enormemente.
+
+RESPUESTA IDEAL:
+  Docker Engine instalado (Linux) o Docker Desktop con WSL2 (Windows).
+  Docker Compose también disponible.
+
+SI LA RESPUESTA NO ES IDEAL:
+  - "No tenemos Docker": PACIOLI puede ejecutarse sin Docker. Cada
+    servicio se instala nativamente. Es más trabajo manual de setup pero
+    perfectamente funcional. Preguntar si pueden aprobar la instalación
+    de: Node.js 20+, Python 3.10+, Rust (via rustup), y PostgreSQL 15+.
+  - "Docker sí, pero no Docker Compose": Docker Compose es solo una
+    herramienta de orquestación. Se puede instalar como plugin de Docker
+    o ejecutar los contenedores manualmente.
+  - "Solo Docker en Linux, el servidor es Windows": Explorar si pueden
+    habilitar WSL2 (requisito mínimo: Windows Server 2019 build 1903+).
+
+
+────────────────────────────────────────────────────────────────────────────────
+PREGUNTA 4: Red — Dirección IP y puertos disponibles
+────────────────────────────────────────────────────────────────────────────────
+
+PREGUNTA:
+  "¿Qué dirección IP tendrá el servidor en la red interna?
+   ¿Será IP estática o dinámica?
+   ¿Podemos abrir los siguientes puertos en el firewall?
+   - Puerto 80 (HTTP) o 443 (HTTPS) — acceso web para los usuarios
+   - Puerto 5432 (PostgreSQL) — solo si usamos BD centralizada
+   ¿Hay restricciones en el firewall para comunicación interna
+   entre servicios dentro del mismo servidor?"
+
+POR QUÉ IMPORTA PARA PACIOLI:
+  Los analistas acceden a PACIOLI desde sus navegadores a través de la
+  red interna (intranet). Necesitan poder llegar al servidor por HTTP/HTTPS.
+  Internamente, PACIOLI tiene tres servicios que se comunican entre sí:
+  - API (puerto 3000) ↔ Pipeline Server (puerto 8000): vía HTTP local
+  - API (puerto 3000) ↔ PostgreSQL (puerto 5432): vía TCP local
+  - Frontend (archivos estáticos) → servido por Nginx en puerto 80/443
+
+  Solo los puertos 80/443 necesitan estar abiertos hacia la red interna.
+  Los puertos 3000, 5432, y 8000 son comunicación interna del servidor
+  (localhost) y NO necesitan exponerse.
+
+RESPUESTA IDEAL:
+  - IP estática (ej: 10.10.x.x o 192.168.x.x)
+  - Puerto 80 y/o 443 abierto en firewall para la subred de los analistas
+  - Sin restricciones para comunicación localhost dentro del servidor
+
+SI LA RESPUESTA NO ES IDEAL:
+  - IP dinámica (DHCP): Cada vez que el servidor se reinicie, la IP puede
+    cambiar. Los analistas perderían acceso hasta que se les notifique la
+    nueva IP. Solicitar IP estática o, como alternativa, un nombre DNS
+    interno (ver pregunta 5).
+  - "Puerto 80 no disponible": Preguntar qué puertos alternativos están
+    disponibles (ej: 8080, 8443). Nginx puede configurarse en cualquier
+    puerto. Los analistas accederían como http://servidor:8080 en vez de
+    http://servidor.
+  - "Firewall bloquea comunicación interna": Esto sería inusual pero si
+    ocurre, necesitamos excepciones para localhost:3000, localhost:5432
+    y localhost:8000.
+
+
+────────────────────────────────────────────────────────────────────────────────
+PREGUNTA 5: Dominio o DNS interno
+────────────────────────────────────────────────────────────────────────────────
+
+PREGUNTA:
+  "¿Es posible asignar un nombre DNS interno para el servidor?
+   Por ejemplo: pacioli.empresa.local o conciliacion.intranet.
+   ¿Manejan un servidor DNS interno o Active Directory?"
+
+POR QUÉ IMPORTA PARA PACIOLI:
+  Un nombre DNS interno permite que los analistas accedan a PACIOLI
+  escribiendo "pacioli.empresa.local" en su navegador en vez de recordar
+  una dirección IP como "10.10.25.47". Esto es especialmente importante
+  si la IP alguna vez cambia — se actualiza el DNS una vez y todos los
+  analistas siguen accediendo sin cambios.
+
+RESPUESTA IDEAL:
+  Sí, tenemos Active Directory / DNS interno. Podemos crear un registro A
+  que apunte "pacioli.empresa.local" a la IP del servidor.
+
+SI LA RESPUESTA NO ES IDEAL:
+  - "No manejamos DNS interno": No es bloqueante. Los analistas pueden
+    acceder directamente por IP (ej: http://10.10.25.47). Considerar
+    agregar la entrada al archivo hosts de cada máquina analista como
+    alternativa manual.
+  - "Solo podemos hacerlo con un ticket formal": Perfecto. Preparar el
+    ticket con: nombre deseado, IP del servidor, propósito de la
+    aplicación. Es un trámite estándar.
+
+
+────────────────────────────────────────────────────────────────────────────────
+PREGUNTA 6: PostgreSQL — servidor centralizado vs contenedor
+────────────────────────────────────────────────────────────────────────────────
+
+PREGUNTA:
+  "¿Tienen un servidor PostgreSQL centralizado que podamos usar?
+   Si es así, ¿qué versión? ¿Podemos crear una base de datos nueva
+   con 5 esquemas propios?
+   ¿O prefieren que PACIOLI traiga su propio PostgreSQL
+   (en contenedor Docker o instalación local)?"
+
+POR QUÉ IMPORTA PARA PACIOLI:
+  PACIOLI requiere PostgreSQL 15 o superior. Utiliza 5 esquemas separados
+  dentro de una sola base de datos:
+  - biq_raw: datos crudos importados de archivos
+  - biq_stg: datos procesados y conciliados (staging)
+  - biq_gold: registros aprobados listos para SAP
+  - biq_auth: usuarios, sesiones, tokens, auditoría
+  - biq_config: configuración, reglas de asignación, ventanas ETL
+
+  Cada esquema tiene sus propias tablas, índices y constraints.
+
+RESPUESTA IDEAL:
+  PostgreSQL centralizado versión 15+ gestionado por IT, con backups
+  automáticos. IT crea la base de datos y el usuario; el desarrollador
+  ejecuta los scripts DDL para crear esquemas y tablas.
+
+SI LA RESPUESTA NO ES IDEAL:
+  - PostgreSQL versión 12-14: PACIOLI probablemente funcione, pero no
+    se ha probado. Algunas features como GENERATED ALWAYS AS IDENTITY
+    requieren v10+. Preguntar si se puede actualizar o si podemos
+    instalar nuestra propia instancia.
+  - "Solo tenemos SQL Server / MySQL / Oracle": PACIOLI está diseñado
+    exclusivamente para PostgreSQL. Las consultas usan sintaxis
+    específica de Postgres (ON CONFLICT, CTEs, generate_series, etc.).
+    Migrar no es viable. Necesitamos una instancia PostgreSQL dedicada.
+  - "Instalen su propio PostgreSQL": Aceptable. Puede ser via Docker
+    (más fácil) o instalación nativa. El desarrollador se encarga del
+    setup, pero IT debe estar al tanto para backups.
+
+
+────────────────────────────────────────────────────────────────────────────────
+PREGUNTA 7: Método de acceso remoto
+────────────────────────────────────────────────────────────────────────────────
+
+PREGUNTA:
+  "¿Cómo accedo al servidor para instalar y configurar PACIOLI?
+   ¿Tienen habilitado acceso SSH (si es Linux) o Escritorio Remoto / RDP
+   (si es Windows)? ¿Se requiere VPN para conectarse?"
+
+POR QUÉ IMPORTA PARA PACIOLI:
+  El desarrollador necesita acceso directo al servidor para:
+  - Instalar dependencias (Node.js, Python, Rust, PostgreSQL o Docker)
+  - Clonar el repositorio de PACIOLI desde GitHub
+  - Configurar archivos .env con credenciales de base de datos
+  - Compilar el componente Rust (pacioli_core)
+  - Ejecutar las migraciones SQL (crear esquemas y tablas)
+  - Configurar Nginx como proxy inverso
+  - Monitorear logs de los servicios
+
+RESPUESTA IDEAL:
+  SSH habilitado (Linux) con usuario que tenga permisos sudo, o
+  RDP habilitado (Windows) con sesión de administrador. VPN proporcionada
+  si el acceso es desde fuera de la oficina.
+
+SI LA RESPUESTA NO ES IDEAL:
+  - "Solo acceso físico al servidor": Funcional pero impráctico para
+    mantenimiento. Solicitar al menos RDP o SSH.
+  - "SSH pero sin sudo": Necesitamos al menos permisos para instalar
+    software con el package manager (apt, yum). Sin sudo, cada
+    instalación requiere un ticket a IT. Negociar sudo limitado.
+  - "Solo a través de un bastion host / jump server": Funciona, pero
+    complica la transferencia de archivos. Preguntar si git y scp
+    están disponibles en el bastion.
+
+
+────────────────────────────────────────────────────────────────────────────────
+PREGUNTA 8: Permisos de administrador
+────────────────────────────────────────────────────────────────────────────────
+
+PREGUNTA:
+  "¿El usuario que nos asignen en el servidor tendrá permisos de
+   administrador? Necesitamos instalar software (Node.js, Python,
+   Docker), crear servicios del sistema, y configurar Nginx.
+   ¿O cada instalación debe pasar por un proceso de aprobación?"
+
+POR QUÉ IMPORTA PARA PACIOLI:
+  El despliegue inicial de PACIOLI requiere instalar varias herramientas.
+  Sin permisos de administrador, el desarrollador depende de IT para cada
+  paso, lo cual puede extender el despliegue de 1 día a varias semanas.
+
+  Software que necesita instalarse:
+  - Node.js 20+ (runtime del API)
+  - Python 3.10+ (runtime del pipeline de datos)
+  - Rust + Cargo (compilador para pacioli_core)
+  - maturin (puente Python-Rust)
+  - Docker y Docker Compose (opcional pero recomendado)
+  - Nginx (proxy inverso para servir el frontend)
+  - PostgreSQL 15+ (si no usan servidor centralizado)
+  - Git (para clonar el repositorio)
+
+RESPUESTA IDEAL:
+  Permisos de administrador completos (root/sudo en Linux, Administrator
+  en Windows) durante la fase de instalación. Después del despliegue
+  inicial, permisos reducidos son aceptables.
+
+SI LA RESPUESTA NO ES IDEAL:
+  - "Sin permisos de admin, todo por ticket": Preparar una lista completa
+    de software a instalar con versiones exactas y enviarlo como un solo
+    ticket. Incluir este documento como referencia.
+  - "Permisos parciales (pueden instalar con apt pero no systemctl)":
+    Podemos usar pm2 (Node.js process manager) o screen/tmux para
+    mantener los servicios corriendo sin necesidad de crear servicios
+    del sistema.
+
+
+────────────────────────────────────────────────────────────────────────────────
+PREGUNTA 9: Acceso a internet desde el servidor
+────────────────────────────────────────────────────────────────────────────────
+
+PREGUNTA:
+  "¿El servidor tiene acceso a internet? Necesitamos descargar paquetes
+   de npm (Node.js), pip (Python), crates.io (Rust), e imágenes de Docker.
+   ¿Hay un proxy corporativo que debamos configurar?
+   ¿O el servidor está completamente aislado de internet?"
+
+POR QUÉ IMPORTA PARA PACIOLI:
+  PACIOLI depende de ~150 paquetes npm (API), ~30 paquetes pip (pipeline),
+  y ~5 crates de Rust que se descargan desde internet durante la
+  instalación. Sin acceso a internet, cada dependencia debe transferirse
+  manualmente al servidor — un proceso tedioso y propenso a errores.
+
+RESPUESTA IDEAL:
+  Acceso a internet disponible, al menos para los registros de paquetes:
+  - registry.npmjs.org (Node.js)
+  - pypi.org (Python)
+  - crates.io (Rust)
+  - hub.docker.com (Docker, si se usa)
+  - github.com (clonado del repositorio)
+
+SI LA RESPUESTA NO ES IDEAL:
+  - "Internet con proxy corporativo": Configurar las variables de entorno
+    HTTP_PROXY y HTTPS_PROXY antes de instalar. npm, pip, y cargo soportan
+    proxy. Preguntar la URL y puerto del proxy.
+  - "Sin internet, servidor aislado": Alternativa viable pero laboriosa:
+    1. Hacer npm pack y pip download en una máquina con internet
+    2. Transferir los archivos al servidor via USB o recurso compartido
+    3. Instalar desde archivos locales con npm install --offline y
+       pip install --no-index
+    Agregar 1-2 días adicionales al plan de despliegue.
+  - "Internet solo en horario específico": Programar la instalación
+    durante esa ventana. Una vez instalado, PACIOLI no necesita internet
+    para funcionar — todo es tráfico de intranet.
+
+
+────────────────────────────────────────────────────────────────────────────────
+PREGUNTA 10: Políticas de respaldo y monitoreo
+────────────────────────────────────────────────────────────────────────────────
+
+PREGUNTA:
+  "¿Tienen políticas de backup automático para el servidor?
+   ¿Con qué frecuencia? ¿Incluyen la base de datos PostgreSQL?
+   ¿Tienen algún sistema de monitoreo (Nagios, Zabbix, etc.)
+   para alertar si el servidor se cae?"
+
+POR QUÉ IMPORTA PARA PACIOLI:
+  PACIOLI almacena registros financieros aprobados (Gold Layer) que
+  alimentan al robot RPA para contabilizar en SAP. La pérdida de estos
+  datos significaría tener que reprocesar y re-aprobar manualmente todas
+  las conciliaciones del período afectado.
+
+  Datos críticos que requieren backup:
+  - biq_gold: registros aprobados listos para SAP (~500-2000 por mes)
+  - biq_auth: usuarios, auditoría de login, reglas de asignación
+  - biq_config: configuración de períodos y ventanas ETL
+  - biq_stg y biq_raw: pueden regenerarse desde archivos fuente, pero
+    el reprocesamiento toma tiempo
+
+RESPUESTA IDEAL:
+  - Backup diario automático de la base de datos (pg_dump)
+  - Retención mínima de 30 días
+  - Backup del filesystem del servidor (semanal)
+  - Monitoreo que alerte si el servidor se cae o si el disco se llena
+
+SI LA RESPUESTA NO ES IDEAL:
+  - "No tenemos backup automático": El desarrollador puede configurar un
+    cron job con pg_dump que respalde la BD diariamente a un directorio
+    de red. Preguntar si hay un recurso compartido de red disponible.
+  - "Backup solo semanal": Aceptable para empezar, pero solicitar backup
+    diario para el schema biq_gold al menos.
+  - "Sin monitoreo": El endpoint GET /health del API de PACIOLI retorna
+    status 200 si todo funciona. IT puede apuntar su herramienta de
+    monitoreo (o un simple curl periódico) a esa URL.
+
+
+════════════════════════════════════════════════════════════════════════════════
+SECCIÓN 2: GLOSARIO — TÉRMINOS DE IT EXPLICADOS PARA PACIOLI
+════════════════════════════════════════════════════════════════════════════════
+
+Cada término incluye: qué significa, cómo se relaciona con PACIOLI,
+y qué necesita saber el desarrollador.
+
+
+────────────────────────────────────────────────────────────────────────────────
+INSTANCIA / VM (Máquina Virtual)
+────────────────────────────────────────────────────────────────────────────────
+
+QUÉ SIGNIFICA:
+  Una computadora virtual que vive dentro de un servidor físico grande.
+  Es como tener tu propia computadora dedicada, pero en realidad comparte
+  hardware con otras VMs. Cada VM tiene su propio sistema operativo,
+  su propia memoria, y su propio disco — aislada de las demás.
+
+CÓMO SE RELACIONA CON PACIOLI:
+  PACIOLI necesita una VM (o un servidor físico) donde instalar sus tres
+  servicios: Node.js API, Python Pipeline, y PostgreSQL. Cuando IT dice
+  "te vamos a dar una instancia", se refieren a una VM asignada para ti.
+
+QUÉ NECESITA SABER EL DESARROLLADOR:
+  Preguntar cuántos recursos tiene la VM (CPU, RAM, disco) y si son
+  dedicados o compartidos. Una VM con 4 CPU, 8 GB RAM y 50 GB SSD es
+  suficiente para PACIOLI. Los recursos compartidos significan que si
+  otra VM en el mismo servidor está bajo carga, PACIOLI podría volverse
+  lento.
+
+
+────────────────────────────────────────────────────────────────────────────────
+INTRANET vs INTERNET
+────────────────────────────────────────────────────────────────────────────────
+
+QUÉ SIGNIFICA:
+  - Internet: la red pública mundial (Google, GitHub, YouTube).
+  - Intranet: la red privada interna de la empresa. Solo las computadoras
+    dentro de la empresa (o conectadas por VPN) pueden ver lo que está en
+    la intranet.
+
+CÓMO SE RELACIONA CON PACIOLI:
+  PACIOLI es una aplicación de INTRANET. Los analistas la acceden desde
+  sus computadoras de trabajo a través de la red interna de la empresa.
+  PACIOLI no necesita estar expuesto a internet — de hecho, NO DEBE
+  estarlo por seguridad (contiene datos financieros sensibles).
+
+  El servidor necesita acceso a internet solo durante la instalación
+  (para descargar paquetes). Una vez instalado, puede funcionar
+  completamente sin internet.
+
+QUÉ NECESITA SABER EL DESARROLLADOR:
+  Los analistas accederán a PACIOLI escribiendo la dirección interna del
+  servidor en su navegador (ej: http://pacioli.empresa.local o
+  http://10.10.25.47). Esta dirección solo funciona dentro de la red
+  de la empresa.
+
+
+────────────────────────────────────────────────────────────────────────────────
+DIRECCIÓN IP (estática vs dinámica)
+────────────────────────────────────────────────────────────────────────────────
+
+QUÉ SIGNIFICA:
+  Una dirección IP es el "número de teléfono" de una computadora en la
+  red. Ejemplo: 10.10.25.47.
+
+  - IP estática: siempre es la misma. Como un número de teléfono fijo.
+  - IP dinámica (DHCP): puede cambiar cada vez que el servidor se
+    reinicia. Como un número temporal que te asignan al entrar.
+
+CÓMO SE RELACIONA CON PACIOLI:
+  Los analistas necesitan una dirección fija para acceder a PACIOLI.
+  Si la IP es dinámica y cambia, los analistas pierden acceso hasta que
+  se les comunique la nueva IP. Un nombre DNS interno resuelve este
+  problema (ver DNS más abajo).
+
+QUÉ NECESITA SABER EL DESARROLLADOR:
+  Solicitar IP estática. Si no es posible, solicitar un nombre DNS
+  interno que IT pueda actualizar cuando la IP cambie. En la configuración
+  de PACIOLI, usar la IP del servidor en las variables de entorno
+  (VITE_API_URL en el frontend apuntará a esta dirección).
+
+
+────────────────────────────────────────────────────────────────────────────────
+PUERTO (Port) — 80, 443, 3000, 5432, 8000
+────────────────────────────────────────────────────────────────────────────────
+
+QUÉ SIGNIFICA:
+  Si la dirección IP es la dirección de un edificio, el puerto es el
+  número de departamento. Un servidor puede tener muchos servicios
+  escuchando en diferentes puertos simultáneamente. Cada servicio usa
+  su propio puerto para no interferir con los demás.
+
+  Puertos que usa PACIOLI:
+
+  Puerto 80 (HTTP):
+    El puerto estándar para páginas web. Cuando escribes
+    http://servidor en el navegador, automáticamente se conecta al
+    puerto 80. Aquí va Nginx sirviendo el frontend de PACIOLI.
+
+  Puerto 443 (HTTPS):
+    Igual que el 80 pero con encriptación SSL/TLS. Si IT proporciona
+    un certificado SSL, el frontend se sirve por aquí.
+
+  Puerto 3000 (API Node.js):
+    El backend de PACIOLI. Recibe peticiones del frontend, consulta la
+    base de datos, y devuelve datos. Los analistas nunca acceden
+    directamente a este puerto — Nginx redirige las peticiones.
+
+  Puerto 5432 (PostgreSQL):
+    El puerto estándar de PostgreSQL. El API se conecta a la base de
+    datos por aquí. Si PostgreSQL está en el mismo servidor, este
+    puerto no necesita exponerse a la red.
+
+  Puerto 8000 (Pipeline Server):
+    El servidor FastAPI que ejecuta el pipeline de datos de Python.
+    Solo el API de Node.js se comunica con este puerto internamente.
+    Nunca se expone a la red.
+
+CÓMO SE RELACIONA CON PACIOLI:
+  Solo el puerto 80 (o 443) necesita estar abierto en el firewall hacia
+  la red interna. Los demás puertos son comunicación interna del servidor.
+
+  Diagrama de puertos:
+
+  Red interna                    Servidor PACIOLI
+  (analistas)                   ┌─────────────────────────┐
+       │                        │                         │
+       ├── :80/443 ───────────► │  Nginx (proxy inverso)  │
+       │                        │    │         │          │
+       │                        │    │ :3000   │ archivos │
+       │                        │    ▼         │ estáticos│
+       │                        │  Node.js API │          │
+       │                        │    │         │          │
+       │                        │    │ :5432   │ :8000    │
+       │                        │    ▼         ▼          │
+       │                        │  PostgreSQL  Pipeline   │
+       │                        │              Server     │
+       │                        └─────────────────────────┘
+
+QUÉ NECESITA SABER EL DESARROLLADOR:
+  Pedir a IT que abran solo el puerto 80 (o 443) en el firewall. Explicar
+  que los otros puertos son internos al servidor. Si el puerto 80 ya está
+  ocupado por otra aplicación, pedir un puerto alternativo (ej: 8080).
+
+
+────────────────────────────────────────────────────────────────────────────────
+FIREWALL
+────────────────────────────────────────────────────────────────────────────────
+
+QUÉ SIGNIFICA:
+  Un firewall es un guardia de seguridad digital que controla qué tráfico
+  de red puede entrar o salir de un servidor. Por defecto, un firewall
+  bloquea todo excepto lo que explícitamente se permite.
+
+  Reglas de firewall dicen cosas como: "permitir conexiones al puerto 80
+  desde cualquier IP de la subred 10.10.0.0/16" o "bloquear todo acceso
+  desde internet".
+
+CÓMO SE RELACIONA CON PACIOLI:
+  Si el firewall del servidor no permite conexiones entrantes al puerto
+  80, los analistas no podrán acceder al sistema desde sus navegadores.
+  El firewall debe tener una regla que permita tráfico HTTP/HTTPS desde
+  la red interna.
+
+QUÉ NECESITA SABER EL DESARROLLADOR:
+  Pedir a IT una regla de firewall que permita:
+  - Tráfico entrante TCP al puerto 80 (y/o 443) desde la subred interna
+  - Tráfico saliente a internet (solo durante instalación, para npm/pip)
+  No necesitan abrir los puertos 3000, 5432, ni 8000 al exterior.
+
+
+────────────────────────────────────────────────────────────────────────────────
+DNS / DOMINIO INTERNO
+────────────────────────────────────────────────────────────────────────────────
+
+QUÉ SIGNIFICA:
+  DNS es el sistema que traduce nombres legibles (como "google.com") a
+  direcciones IP (como "142.250.80.46"). Un dominio interno funciona
+  igual pero solo dentro de la red de la empresa.
+
+  Por ejemplo, IT puede configurar que "pacioli.empresa.local" apunte
+  a la IP 10.10.25.47. Así los analistas escriben el nombre en vez de
+  recordar la IP.
+
+CÓMO SE RELACIONA CON PACIOLI:
+  Un nombre DNS interno hace que PACIOLI sea más fácil de usar y más
+  resiliente a cambios de IP. También es necesario si se quiere
+  configurar HTTPS con un certificado interno.
+
+QUÉ NECESITA SABER EL DESARROLLADOR:
+  El nombre DNS elegido debe configurarse en:
+  - La variable VITE_API_URL del frontend (ej: http://pacioli.empresa.local/api/v1)
+  - La configuración de CORS del API (reemplazar 'https://tu-dominio.com'
+    en apps/api/src/app.js línea 43)
+  - El bloque server_name de Nginx
+
+
+────────────────────────────────────────────────────────────────────────────────
+SSH vs RDP
+────────────────────────────────────────────────────────────────────────────────
+
+QUÉ SIGNIFICA:
+  Dos formas de conectarse a un servidor remoto:
+
+  SSH (Secure Shell):
+    Acceso por línea de comandos (terminal). Estándar en servidores Linux.
+    Se conecta con: ssh usuario@10.10.25.47
+    Todo es texto — no hay interfaz gráfica. Es eficiente y rápido.
+
+  RDP (Remote Desktop Protocol):
+    Acceso por escritorio remoto completo (ventanas, mouse, teclado).
+    Estándar en servidores Windows. Se conecta con la app "Conexión a
+    Escritorio Remoto" de Windows.
+
+CÓMO SE RELACIONA CON PACIOLI:
+  El desarrollador usará SSH o RDP para:
+  - Instalar dependencias en el servidor
+  - Clonar el repositorio desde GitHub
+  - Configurar archivos .env y Nginx
+  - Monitorear los servicios y ver logs
+  - Resolver problemas si algo falla
+
+QUÉ NECESITA SABER EL DESARROLLADOR:
+  Preguntar qué método está disponible y las credenciales de acceso.
+  Si es SSH, verificar que se puede ejecutar git clone, npm, python,
+  y docker desde la sesión. Si es RDP, verificar que PowerShell o
+  CMD estén disponibles con permisos suficientes.
+
+
+────────────────────────────────────────────────────────────────────────────────
+DOCKER / DOCKER COMPOSE / CONTENEDOR
+────────────────────────────────────────────────────────────────────────────────
+
+QUÉ SIGNIFICA:
+  Docker es una herramienta que empaqueta una aplicación con todas sus
+  dependencias dentro de un "contenedor" — como una caja que contiene
+  todo lo necesario para que el programa funcione, incluyendo el sistema
+  operativo base, las librerías, y la configuración.
+
+  Un contenedor es como una VM ultra-liviana. Arranca en segundos,
+  usa menos recursos, y se puede destruir y recrear sin afectar nada.
+
+  Docker Compose es una herramienta que orquesta múltiples contenedores
+  al mismo tiempo. Con un solo archivo (docker-compose.yml) defines
+  todos tus servicios y con un solo comando los levantas todos.
+
+CÓMO SE RELACIONA CON PACIOLI:
+  Sin Docker, el desarrollador debe instalar manualmente:
+  - Node.js 20 (para el API)
+  - Python 3.10+ con ~30 paquetes pip (para el pipeline)
+  - Rust + cargo (para compilar pacioli_core)
+  - PostgreSQL 15 (para la base de datos)
+  - Nginx (para servir el frontend)
+
+  Con Docker, todo se empaqueta en contenedores predefinidos y se
+  levanta con un solo comando: docker compose up -d
+
+QUÉ NECESITA SABER EL DESARROLLADOR:
+  PACIOLI puede funcionar con o sin Docker. Sin Docker requiere más
+  trabajo manual de instalación pero es igual de funcional. La decisión
+  depende de lo que IT permita instalar en el servidor.
+
+
+────────────────────────────────────────────────────────────────────────────────
+WSL2 (Windows Subsystem for Linux)
+────────────────────────────────────────────────────────────────────────────────
+
+QUÉ SIGNIFICA:
+  WSL2 es una funcionalidad de Windows 10/11 y Windows Server 2019+ que
+  permite ejecutar Linux dentro de Windows sin necesidad de una VM
+  completa. Es como tener una terminal de Linux integrada en Windows.
+
+CÓMO SE RELACIONA CON PACIOLI:
+  Docker Desktop en Windows requiere WSL2 para funcionar. Si el servidor
+  es Windows y se quiere usar Docker, WSL2 debe estar habilitado.
+  Sin WSL2, Docker no puede instalarse en Windows Server.
+
+  Además, WSL2 permite compilar el componente Rust de PACIOLI
+  (pacioli_core) de forma nativa sin necesidad de Visual Studio Build
+  Tools.
+
+QUÉ NECESITA SABER EL DESARROLLADOR:
+  Si el servidor es Windows Server, preguntar si WSL2 está habilitado.
+  Para habilitarlo se requiere Windows Server 2019 build 1903 o superior
+  y permisos de administrador. El comando es:
+    wsl --install
+  Esto instala Ubuntu por defecto dentro de Windows.
+
+
+────────────────────────────────────────────────────────────────────────────────
+REVERSE PROXY / NGINX
+────────────────────────────────────────────────────────────────────────────────
+
+QUÉ SIGNIFICA:
+  Un reverse proxy es un intermediario que recibe todas las peticiones
+  de los usuarios y las redirige al servicio correcto. Es como una
+  recepcionista que recibe las llamadas y las transfiere al departamento
+  adecuado.
+
+  Nginx es el software más popular para esto. Es extremadamente rápido
+  y eficiente — puede manejar miles de conexiones simultáneas con
+  recursos mínimos.
+
+CÓMO SE RELACIONA CON PACIOLI:
+  Nginx cumple tres funciones para PACIOLI:
+
+  1. Servir el frontend (archivos HTML/CSS/JS estáticos de React)
+  2. Redirigir peticiones /api/* al servidor Node.js (puerto 3000)
+  3. (Opcional) Terminar SSL/HTTPS con un certificado interno
+
+  Sin Nginx, los analistas tendrían que acceder directamente al
+  puerto 3000 del API, y el frontend tendría que servirse por separado.
+  Nginx unifica todo en un solo punto de entrada (puerto 80).
+
+QUÉ NECESITA SABER EL DESARROLLADOR:
+  La configuración de Nginx para PACIOLI es un archivo de ~30 líneas.
+  Lo crea el desarrollador. Si IT ya tiene Nginx o Apache en el
+  servidor para otras aplicaciones, preguntar si pueden agregar un
+  nuevo bloque de configuración (server block / virtual host).
+
+
+────────────────────────────────────────────────────────────────────────────────
+SSL / CERTIFICADO HTTPS (CA interna)
+────────────────────────────────────────────────────────────────────────────────
+
+QUÉ SIGNIFICA:
+  SSL/TLS es la encriptación que convierte http:// en https://.
+  Con HTTPS, toda la comunicación entre el navegador del analista y
+  el servidor de PACIOLI va encriptada — nadie en la red puede ver
+  los datos que viajan.
+
+  Un certificado SSL es un archivo que prueba la identidad del servidor.
+  En una empresa, generalmente hay una CA interna (Autoridad Certificadora)
+  que emite certificados para servidores internos.
+
+CÓMO SE RELACIONA CON PACIOLI:
+  PACIOLI maneja datos financieros sensibles (montos, clientes, facturas)
+  y credenciales de login (usuario y contraseña). HTTPS protege estos
+  datos en tránsito por la red interna.
+
+  HTTPS no es estrictamente obligatorio en intranet, pero es altamente
+  recomendable, especialmente si hay segmentos de red Wi-Fi o VPN.
+
+QUÉ NECESITA SABER EL DESARROLLADOR:
+  Preguntar a IT si pueden emitir un certificado SSL para el dominio
+  interno de PACIOLI (ej: pacioli.empresa.local). IT proporcionará dos
+  archivos: el certificado (.crt) y la llave privada (.key). Estos
+  se configuran en Nginx.
+
+  Si no hay CA interna, PACIOLI puede funcionar con HTTP simple en
+  intranet. No usar certificados auto-firmados — generan advertencias
+  molestas en los navegadores de los analistas.
+
+
+────────────────────────────────────────────────────────────────────────────────
+VARIABLES DE ENTORNO (.env)
+────────────────────────────────────────────────────────────────────────────────
+
+QUÉ SIGNIFICA:
+  Las variables de entorno son configuraciones que se pasan a un programa
+  desde afuera, sin estar escritas en el código fuente. Se almacenan en
+  archivos .env (clave=valor) y se leen al arrancar la aplicación.
+
+  Son el estándar de la industria para manejar secretos (contraseñas,
+  tokens, claves) sin que estos aparezcan en el código fuente que se
+  guarda en Git.
+
+CÓMO SE RELACIONA CON PACIOLI:
+  PACIOLI usa 3 archivos .env:
+
+  .env (raíz del proyecto):
+    Ruta del proyecto y credenciales de PostgreSQL
+
+  apps/api/.env:
+    Puerto del API, credenciales de BD, secreto JWT, configuración
+    de bcrypt, ruta del pipeline, API key del pipeline server
+
+  data-pipeline/.env:
+    Ruta del pipeline, credenciales de BD, API key del pipeline server
+
+  Estos archivos NUNCA se suben a GitHub — cada servidor tiene los suyos
+  con las credenciales correctas para ese entorno.
+
+QUÉ NECESITA SABER EL DESARROLLADOR:
+  El repositorio incluye archivos .env.example con la estructura y
+  valores placeholder. El desarrollador debe copiar cada .env.example
+  a .env y llenar los valores reales en el servidor de producción.
+  Las credenciales de BD las proporciona IT o se definen al instalar
+  PostgreSQL.
+
+
+────────────────────────────────────────────────────────────────────────────────
+POSTGRESQL SERVIDOR vs POSTGRESQL EN DOCKER
+────────────────────────────────────────────────────────────────────────────────
+
+QUÉ SIGNIFICA:
+  Dos formas de ejecutar PostgreSQL:
+
+  PostgreSQL Servidor (centralizado):
+    IT mantiene un servidor PostgreSQL compartido donde varias
+    aplicaciones tienen sus bases de datos. IT se encarga de
+    actualizaciones, backups, alta disponibilidad, y monitoreo.
+
+  PostgreSQL en Docker:
+    PostgreSQL se ejecuta dentro de un contenedor Docker en el mismo
+    servidor que PACIOLI. El desarrollador controla la versión, la
+    configuración, y los datos. No depende de IT para cambios.
+
+CÓMO SE RELACIONA CON PACIOLI:
+  PACIOLI requiere PostgreSQL 15+ con permisos para:
+  - Crear 5 esquemas (biq_raw, biq_stg, biq_gold, biq_auth, biq_config)
+  - Crear ~30 tablas con índices y constraints
+  - Ejecutar funciones como generate_series, CTEs, y ON CONFLICT
+
+VENTAJAS DE CADA OPCIÓN:
+
+  Servidor centralizado:
+    + Backups automáticos gestionados por IT
+    + Alta disponibilidad si IT lo tiene configurado
+    + No consume recursos del servidor de PACIOLI
+    - Depende de IT para cambios de configuración
+    - Posible latencia de red si está en otro servidor
+
+  Docker:
+    + Control total del desarrollador
+    + Versión exacta garantizada (15+)
+    + Sin latencia de red (localhost)
+    - Backups son responsabilidad del desarrollador
+    - Consume RAM del servidor de PACIOLI (~200 MB)
+
+QUÉ NECESITA SABER EL DESARROLLADOR:
+  Si IT ofrece PostgreSQL centralizado, verificar que sea versión 15+ y
+  que permitan crear esquemas propios. Si la versión es inferior o hay
+  restricciones, es mejor usar PostgreSQL en Docker para tener control
+  completo.
+
+
+════════════════════════════════════════════════════════════════════════════════
+SECCIÓN 3: RESUMEN DE REQUISITOS DE DESPLIEGUE DE PACIOLI
+════════════════════════════════════════════════════════════════════════════════
+
+Este resumen puede entregarse directamente a IT como referencia técnica.
+
+────────────────────────────────────────────────────────────────────────────────
+¿QUÉ ES PACIOLI?
+────────────────────────────────────────────────────────────────────────────────
+
+PACIOLI es un sistema de conciliación bancaria automatizada para el
+departamento de tesorería. Procesa extractos bancarios, liquidaciones de
+tarjetas de crédito, y depósitos, los cruza contra facturas del sistema
+SAP, y genera archivos de contabilización para el robot RPA de SAP.
+Reemplaza más de 5 horas diarias de trabajo manual por un proceso
+automatizado de menos de 44 segundos.
+
+
+────────────────────────────────────────────────────────────────────────────────
+COMPONENTES QUE NECESITAN EJECUTARSE
+────────────────────────────────────────────────────────────────────────────────
+
+  Componente            Puerto    Protocolo    Exposición
+  ─────────────────────────────────────────────────────────
+  Nginx                 80/443    HTTP/HTTPS   Red interna (analistas)
+  Node.js API           3000      HTTP         Solo localhost
+  Pipeline Server       8000      HTTP         Solo localhost
+  PostgreSQL            5432      TCP          Solo localhost (*)
+
+  (*) Si PostgreSQL es centralizado de IT, el puerto 5432 es en el
+      servidor de IT, no en el servidor de PACIOLI.
+
+  Total de servicios: 4 (Nginx + Node.js + Python + PostgreSQL)
+  Usuarios concurrentes esperados: 5-7 analistas simultáneos
+
+
+────────────────────────────────────────────────────────────────────────────────
+REQUISITOS MÍNIMOS DEL SERVIDOR
+────────────────────────────────────────────────────────────────────────────────
+
+  Recurso          Mínimo       Recomendado     Notas
+  ─────────────────────────────────────────────────────────
+  CPU              2 núcleos    4 núcleos       Dedicados
+  RAM              4 GB         8 GB            Dedicados
+  Disco            20 GB        50 GB           SSD preferido
+  OS               Win Srv 2019 Ubuntu 22.04    Linux es preferido
+                   o Ubuntu 20+                 pero ambos funcionan
+  Red              IP estática  IP + DNS        Intranet
+
+  Software requerido en el servidor:
+  ─────────────────────────────────────────────────────────
+  Node.js          >= 20.0.0    Runtime del API
+  Python           >= 3.10      Runtime del pipeline de datos
+  Rust + Cargo     >= 1.75      Compilar pacioli_core (una vez)
+  maturin          >= 1.7       Puente Python-Rust (una vez)
+  Nginx            >= 1.18      Proxy inverso + frontend
+  PostgreSQL       >= 15        Base de datos (si no es centralizado)
+  Git              cualquiera   Clonar repositorio
+
+  Alternativa: si Docker está disponible, solo se necesita:
+  - Docker Engine >= 20.10
+  - Docker Compose >= 2.0
+  - Git
+
+
+────────────────────────────────────────────────────────────────────────────────
+QUÉ PROPORCIONA IT vs QUÉ CONFIGURA EL DESARROLLADOR
+────────────────────────────────────────────────────────────────────────────────
+
+  IT proporciona:
+  ──────────────
+  - Servidor / VM con recursos asignados
+  - Acceso remoto (SSH o RDP) con credenciales
+  - IP estática (y opcionalmente nombre DNS interno)
+  - Puerto 80/443 abierto en firewall hacia la subred de analistas
+  - Acceso a internet desde el servidor (temporal, para instalación)
+  - PostgreSQL centralizado (o permiso para instalar PostgreSQL local)
+  - Credenciales de base de datos (usuario, contraseña, nombre de BD)
+  - Certificado SSL (opcional, si se desea HTTPS)
+  - Política de backup definida
+
+  El desarrollador configura:
+  ───────────────────────────
+  - Instalación de Node.js, Python, Rust (o Docker)
+  - Clonación del repositorio desde GitHub
+  - Compilación del módulo Rust (pacioli_core)
+  - Configuración de archivos .env
+  - Ejecución de scripts DDL (crear esquemas y tablas en PostgreSQL)
+  - Seed de usuarios iniciales
+  - Configuración de Nginx (proxy inverso + frontend estático)
+  - Configuración de servicios para auto-inicio (systemd o pm2)
+  - Pruebas de verificación
+
+
+────────────────────────────────────────────────────────────────────────────────
+USO ESTIMADO DE RECURSOS
+────────────────────────────────────────────────────────────────────────────────
+
+  En reposo (sin pipeline corriendo, pocos analistas):
+  ─────────────────────────────────────────────────────
+  Node.js API:        ~80 MB RAM,  <1% CPU
+  Pipeline Server:    ~120 MB RAM, <1% CPU
+  PostgreSQL:         ~200 MB RAM, <1% CPU
+  Nginx:              ~5 MB RAM,   <1% CPU
+  TOTAL REPOSO:       ~400 MB RAM
+
+  Bajo carga (pipeline ejecutándose + analistas activos):
+  ─────────────────────────────────────────────────────
+  Node.js API:        ~150 MB RAM, ~5% CPU
+  Pipeline (Python):  ~800 MB RAM, ~60% CPU (por ~44 segundos)
+  PostgreSQL:         ~500 MB RAM, ~20% CPU
+  Nginx:              ~10 MB RAM,  <1% CPU
+  TOTAL PICO:         ~1.5 GB RAM, ~85% CPU (durante 44 segundos)
+
+  El pico de CPU ocurre solo durante la ejecución del pipeline
+  (una vez al día, ~44 segundos). El resto del tiempo, el sistema
+  opera con <5% de CPU y ~400 MB de RAM.
+
+  Espacio en disco:
+  ─────────────────
+  Código fuente + dependencias:   ~300 MB
+  Base de datos (mes típico):     ~500 MB
+  Logs (rotados semanalmente):    ~50 MB
+  Backups locales (si aplica):    ~2 GB
+  TOTAL ESTIMADO:                 ~3 GB (crece ~500 MB/año)
+
+
+════════════════════════════════════════════════════════════════════════════════
+SECCIÓN 4: TIPS PARA LA CONVERSACIÓN
+════════════════════════════════════════════════════════════════════════════════
+
+Cómo manejar respuestas comunes del departamento de IT:
+
+
+────────────────────────────────────────────────────────────────────────────────
+ESCENARIO 1: "No tenemos Docker instalado"
+────────────────────────────────────────────────────────────────────────────────
+
+QUÉ SIGNIFICA:
+  El servidor no tiene Docker y probablemente IT no lo aprobará fácilmente
+  (Docker requiere privilegios elevados y es una herramienta que IT no
+  siempre conoce o confía).
+
+CÓMO AFECTA A PACIOLI:
+  No es bloqueante. PACIOLI fue diseñado para funcionar sin Docker.
+  Simplemente requiere más trabajo manual de instalación:
+  - Instalar cada componente individualmente (Node.js, Python, Rust, etc.)
+  - Configurar servicios del sistema manualmente (systemd o pm2)
+  - No hay un docker-compose up que levante todo en un comando
+
+QUÉ PEDIR:
+  "Entendido. En ese caso, ¿podemos instalar directamente en el servidor
+   los siguientes programas? Node.js 20, Python 3.10, el compilador
+   Rust, Nginx, y PostgreSQL 15. Son todos software open source estándar.
+   ¿Puedo instalarlos yo, o necesitan hacerlo ustedes?"
+
+PLAN B:
+  Si IT tampoco aprueba la instalación directa de software, pedir que
+  ellos instalen lo necesario. Proveer la lista exacta de paquetes con
+  versiones.
+
+
+────────────────────────────────────────────────────────────────────────────────
+ESCENARIO 2: "El servidor es Windows Server 2019"
+────────────────────────────────────────────────────────────────────────────────
+
+QUÉ SIGNIFICA:
+  El servidor usa Windows en vez de Linux. PACIOLI funciona en ambos,
+  pero la experiencia de despliegue cambia.
+
+CÓMO AFECTA A PACIOLI:
+  En Windows Server:
+  - Node.js y Python se instalan con MSI installers — proceso normal
+  - Rust requiere instalar Visual Studio Build Tools (C++ workload)
+    antes de poder compilar pacioli_core. Es una descarga de ~2 GB.
+  - Nginx tiene versión para Windows, pero es menos común. Alternativa:
+    IIS (Internet Information Services) que viene incluido en Windows
+    Server puede hacer reverse proxy.
+  - Los servicios se configuran como Windows Services en vez de systemd
+  - Las rutas de archivos usan backslash (\) — PACIOLI ya maneja esto
+
+QUÉ PEDIR:
+  "Perfecto, Windows Server 2019 funciona. Voy a necesitar:
+   1. Permisos para instalar software (o que instalen: Node.js 20,
+      Python 3.10, Visual Studio Build Tools, Nginx o IIS)
+   2. ¿Está habilitado WSL2? Eso simplificaría la compilación de Rust.
+   3. ¿Puedo crear Windows Services para que mis aplicaciones se
+      reinicien automáticamente?"
+
+PLAN B:
+  Si no se puede instalar Visual Studio Build Tools (para Rust), una
+  alternativa es compilar pacioli_core en la máquina local del
+  desarrollador con el mismo target (Windows x64) y copiar el archivo
+  .pyd compilado al servidor.
+
+
+────────────────────────────────────────────────────────────────────────────────
+ESCENARIO 3: "No puedes usar el puerto 80, está ocupado"
+────────────────────────────────────────────────────────────────────────────────
+
+QUÉ SIGNIFICA:
+  Otra aplicación web (probablemente IIS o Apache) ya está usando el
+  puerto 80 en ese servidor.
+
+CÓMO AFECTA A PACIOLI:
+  Impacto mínimo. Nginx (o el proxy existente) puede configurarse en
+  cualquier puerto alternativo. Los analistas simplemente accederán
+  con el número de puerto en la URL.
+
+QUÉ PEDIR:
+  "¿Qué puertos alternativos están disponibles? El 8080 es el más
+   común para aplicaciones web. ¿Puede abrirse en el firewall?
+   Los analistas accederían como http://servidor:8080"
+
+  Alternativa mejor: "¿Es posible agregar un virtual host en el
+  servidor web existente (IIS o Apache) que redirija un path o
+  subdominio específico hacia el puerto 3000 de PACIOLI? Por ejemplo:
+  http://servidor/pacioli/ → localhost:3000"
+
+PLAN B:
+  Si ningún puerto HTTP está disponible, preguntar si se puede usar
+  un servidor/VM diferente donde el puerto 80 esté libre.
+
+
+────────────────────────────────────────────────────────────────────────────────
+ESCENARIO 4: "Tenemos nuestro propio PostgreSQL centralizado"
+────────────────────────────────────────────────────────────────────────────────
+
+QUÉ SIGNIFICA:
+  IT gestiona un servidor PostgreSQL compartido. Esto es una buena
+  noticia — significa que los backups, actualizaciones, y monitoreo
+  de la base de datos están cubiertos por IT.
+
+CÓMO AFECTA A PACIOLI:
+  Positivamente, siempre que la versión sea 15+. PACIOLI necesita:
+  - Una base de datos nueva (ej: "pacioli_db")
+  - Un usuario con permisos de CREATE SCHEMA y CREATE TABLE
+  - Permisos para ejecutar DDL (crear tablas, índices, funciones)
+  - El usuario debe poder hacer INSERT, UPDATE, DELETE, SELECT en
+    todos los esquemas de PACIOLI
+
+QUÉ PEDIR:
+  "Excelente. ¿Qué versión de PostgreSQL es? Necesitamos la 15 o
+   superior. ¿Pueden crearnos una base de datos llamada 'pacioli_db'
+   y un usuario con permisos completos sobre ella? Yo ejecuto los
+   scripts de creación de esquemas y tablas.
+
+   ¿Pueden proporcionarme:
+   - Host / IP del servidor PostgreSQL
+   - Puerto (generalmente 5432)
+   - Nombre de la base de datos
+   - Usuario y contraseña"
+
+PLAN B:
+  Si la versión es inferior a 15, preguntar si pueden crear una
+  instancia separada o actualizar. Si no, evaluar si las features
+  específicas de PostgreSQL 15 que usa PACIOLI son estrictamente
+  necesarias (la mayoría del SQL es compatible desde v12+, pero no
+  está probado oficialmente).
+
+
+────────────────────────────────────────────────────────────────────────────────
+ESCENARIO 5: "No tienes permisos de administrador"
+────────────────────────────────────────────────────────────────────────────────
+
+QUÉ SIGNIFICA:
+  IT no dará privilegios elevados. El desarrollador no puede instalar
+  software, crear servicios del sistema, ni modificar la configuración
+  del servidor.
+
+CÓMO AFECTA A PACIOLI:
+  Esto complica significativamente el despliegue. Sin permisos de
+  administrador no se puede:
+  - Instalar Node.js, Python, Rust, Nginx, PostgreSQL
+  - Configurar servicios de auto-inicio
+  - Abrir o configurar puertos
+  - Instalar Docker
+
+QUÉ PEDIR:
+  "Entiendo la política de seguridad. ¿Podemos trabajar de esta forma?
+
+   1. Yo les envío la lista completa de software a instalar con
+      versiones exactas y enlaces de descarga.
+   2. IT instala todo según la lista.
+   3. Una vez instalado, ¿puedo al menos ejecutar comandos como
+      npm install, pip install, y git clone con mi usuario?
+   4. ¿Puedo crear un archivo de configuración de Nginx o necesito
+      que IT lo haga?
+
+   Mi objetivo es minimizar los tickets que necesito abrir. Si me
+   dicen exactamente qué puedo y qué no puedo hacer, preparo todo
+   para que el proceso sea lo más ágil posible."
+
+PLAN B:
+  Preparar un documento técnico detallado con CADA paso que IT
+  necesita ejecutar. Incluir los comandos exactos de instalación,
+  los archivos de configuración, y los resultados esperados de cada
+  paso. Convertir el despliegue en un procedimiento que IT pueda
+  seguir paso a paso. Esto puede tomar varias reuniones pero es
+  la forma más segura de avanzar.
+
+
+────────────────────────────────────────────────────────────────────────────────
+ESCENARIO 6: "No hay acceso a internet desde el servidor"
+────────────────────────────────────────────────────────────────────────────────
+
+QUÉ SIGNIFICA:
+  El servidor está en un segmento de red aislado sin salida a internet.
+  Esto es común en entornos con altos requisitos de seguridad (bancos,
+  gobierno, infraestructura crítica).
+
+CÓMO AFECTA A PACIOLI:
+  Impacto alto en la INSTALACIÓN, impacto cero en la OPERACIÓN.
+
+  Instalación (afectada):
+  - No se puede ejecutar npm install (descarga ~150 paquetes de internet)
+  - No se puede ejecutar pip install (descarga ~30 paquetes de internet)
+  - No se puede ejecutar cargo build (descarga ~5 crates de internet)
+  - No se puede ejecutar git clone (descarga el repositorio de GitHub)
+  - No se pueden descargar imágenes Docker
+
+  Operación (no afectada):
+  - PACIOLI se comunica solamente dentro de la intranet
+  - No hace llamadas a APIs externas
+  - No necesita internet para ninguna funcionalidad
+
+QUÉ PEDIR:
+  "Entendido. ¿Hay alguna forma de transferir archivos al servidor?
+   ¿Un recurso compartido de red, USB autorizado, o una máquina
+   intermedia con acceso a ambas redes?
+
+   Necesito transferir aproximadamente 300 MB de archivos:
+   - El código fuente de PACIOLI (5 MB)
+   - Las dependencias de Node.js empaquetadas (200 MB)
+   - Las dependencias de Python empaquetadas (50 MB)
+   - Los crates de Rust empaquetados (10 MB)
+
+   Si me indican el mecanismo de transferencia, yo preparo todo en un
+   paquete autocontenido que no necesite internet."
+
+PLAN B:
+  Preparar el despliegue en una máquina con internet y empaquetar todo:
+
+  1. npm pack + npm install --offline
+  2. pip download + pip install --no-index
+  3. cargo vendor (empaqueta crates)
+  4. Copiar el repositorio completo como tar.gz
+
+  Transferir al servidor por el medio que IT apruebe (USB, SFTP,
+  recurso compartido). Agregar 1-2 días al plan de despliegue para
+  este proceso.
+
+
+════════════════════════════════════════════════════════════════════════════════
+SECCIÓN 5: DIAGRAMA DE ARQUITECTURA PARA IT
+════════════════════════════════════════════════════════════════════════════════
+
+Diagrama simplificado que muestra todos los componentes de PACIOLI,
+sus puertos, y cómo se conectan. Puede mostrarse a IT para explicar
+qué se está desplegando.
+
+
+┌─────────────────────────────────────────────────────────────────────┐
+│                        SERVIDOR PACIOLI                             │
+│                   (VM / Instancia asignada por IT)                  │
+│                                                                     │
+│   ┌─────────────────────────────────────────────────────────────┐   │
+│   │                    NGINX (puerto 80/443)                    │   │
+│   │         ┌─────────────────┬─────────────────────┐          │   │
+│   │         │  Archivos React │  Proxy: /api/* ──►  │          │   │
+│   │         │  (estáticos)    │  localhost:3000      │          │   │
+│   │         └─────────────────┴─────────────────────┘          │   │
+│   └─────────────────────────────────────────────────────────────┘   │
+│                                 │                                   │
+│                          /api/v1/*                                  │
+│                                 ▼                                   │
+│   ┌─────────────────────────────────────────────────────────────┐   │
+│   │                NODE.JS API (puerto 3000)                    │   │
+│   │                                                             │   │
+│   │  Express 5 — 14 módulos — 60 endpoints                     │   │
+│   │  Autenticación JWT — Rate limiting — Helmet                 │   │
+│   │                                                             │   │
+│   │  Módulos:                                                   │   │
+│   │  auth · transactions · portfolio · workspace · overview     │   │
+│   │  reconciliation · reversals · gold-export · reports         │   │
+│   │  assignments · locks · notifications · ingestion · users    │   │
+│   └──────────────┬──────────────────────────┬───────────────────┘   │
+│                  │                          │                       │
+│           SQL queries                POST /run                     │
+│           (puerto 5432)              (puerto 8000)                  │
+│                  ▼                          ▼                       │
+│   ┌──────────────────────┐   ┌──────────────────────────────┐      │
+│   │     POSTGRESQL       │   │     PIPELINE SERVER          │      │
+│   │    (puerto 5432)     │   │    (puerto 8000)             │      │
+│   │                      │   │                              │      │
+│   │  5 esquemas:         │   │  FastAPI — mantiene Python   │      │
+│   │  ┌────────────────┐  │   │  siempre activo              │      │
+│   │  │ biq_raw        │  │   │                              │      │
+│   │  │ biq_stg        │  │   │  Ejecuta el pipeline de     │      │
+│   │  │ biq_gold       │  │   │  datos cuando el API lo     │      │
+│   │  │ biq_auth       │  │   │  solicita (POST /run)       │      │
+│   │  │ biq_config     │  │   │                              │      │
+│   │  └────────────────┘  │   │  ┌────────────────────────┐  │      │
+│   │                      │   │  │ PIPELINE PYTHON        │  │      │
+│   │  ~30 tablas          │   │  │ 18 procesos en 6 grupos│  │      │
+│   │  Índices y           │   │  │ ~44 segundos           │  │      │
+│   │  constraints         │   │  │                        │  │      │
+│   │                      │   │  │ Llama a Rust:          │  │      │
+│   │                      │   │  │ ┌────────────────────┐ │  │      │
+│   │                      │◄──│──│ │  pacioli_core      │ │  │      │
+│   │                      │   │  │ │  (subset sum +     │ │  │      │
+│   │                      │   │  │ │   fuzzy matching)  │ │  │      │
+│   │                      │   │  │ └────────────────────┘ │  │      │
+│   │                      │   │  └────────────────────────┘  │      │
+│   └──────────────────────┘   └──────────────────────────────┘      │
+│                                                                     │
+└─────────────────────────────────────────────────────────────────────┘
+         ▲                                          │
+         │                                          ▼
+   ┌─────┴──────┐                          ┌────────────────┐
+   │  ANALISTAS │                          │  ROBOT RPA     │
+   │  (5-7)     │                          │  (SAP F-28)    │
+   │            │                          │                │
+   │  Navegador │                          │  Lee biq_gold  │
+   │  Chrome    │                          │  y contabiliza │
+   │  :80/:443  │                          │  en SAP        │
+   └────────────┘                          └────────────────┘
+
+
+FLUJO DE DATOS SIMPLIFICADO:
+─────────────────────────────
+
+  1. Analista sube archivos (Excel) → Frontend → API → Servidor Pipeline
+  2. Pipeline procesa 10 fuentes de datos → biq_raw → biq_stg (matching)
+  3. Analista revisa coincidencias → Frontend → API → biq_stg
+  4. Analista aprueba → API → biq_gold (inmutable)
+  5. Robot RPA lee biq_gold → contabiliza en SAP (F-28)
+
+
+PUERTOS Y FIREWALL — RESUMEN:
+──────────────────────────────
+
+  Puerto    Servicio          Exposición         Firewall
+  ────────────────────────────────────────────────────────
+  80/443    Nginx             Red interna        ABRIR
+  3000      Node.js API       localhost           No abrir
+  5432      PostgreSQL        localhost (*)       No abrir (*)
+  8000      Pipeline Server   localhost           No abrir
+
+  (*) Si PostgreSQL es centralizado de IT y está en otro servidor,
+      el puerto 5432 debe estar accesible entre los dos servidores.
+
+
+════════════════════════════════════════════════════════════════════════════════
+FIN DEL DOCUMENTO
+════════════════════════════════════════════════════════════════════════════════
+
+Preparado para: Reunión con el departamento de IT
+Sistema: PACIOLI v1.0 — Sistema de Conciliación Bancaria Automatizada
+Repositorio: https://github.com/Fabrizio1106/pacioli
