@@ -1,0 +1,9 @@
+# config/settings.yaml
+
+logging:
+  folder_name: "logs"
+  level: "INFO"
+
+paths:
+  raw_folder_name: "data_raw"
+  processed_folder_name: "processed_files"

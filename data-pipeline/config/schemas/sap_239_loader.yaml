@@ -1,0 +1,40 @@
+# config/schemas/sap_239_loader.yaml
+
+loader_name: "SAP_CTA_239"
+target_table: "raw_sap_cta_239"
+batch_prefix: "T239-"
+
+# Subcarpetas (Relativas a data_raw y processed_files)
+input_subfolder: "00. Banco_Cta_239/Cta_Transitoria_239"
+success_subfolder: "00. Banco_Cta_239_Processed/Cta_Transitoria_239_Processed"
+failed_subfolder: "00. Banco_Cta_239_failed/Cta_Transitoria_239_failed"
+
+# Configuración de Lectura
+header_row: 0
+
+# Mapeo Excel -> SQL
+column_mapping:
+    "Icono part.abiertas/comp.": "status_partida"
+    "Asignación": "asignacion"
+    "Nº documento": "num_documento"
+    "Clase de documento": "clase_documento"
+    "Fecha de documento": "fecha_documento"
+    "Clave contabiliz.": "clave_contabilizacion"
+    "Importe en moneda local": "importe_ml"
+    "Moneda local": "moneda_local"
+    "Indicador impuestos": "indicador_impuestos"
+    "Doc.compensación": "doc_compensacion"
+    "Texto": "texto"
+    "Posición": "posicion"
+    "Ejercicio": "ejercicio"
+
+
+# Columnas obligatorias (Si faltan, el archivo se rechaza)
+required_columns:
+  - "Nº documento"
+  - "Fecha de documento"
+  - "Importe en moneda local"
+
+# Configuración de fechas para validación de Gaps
+date_columns:
+  - "fecha_documento"

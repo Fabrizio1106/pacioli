@@ -1,0 +1,36 @@
+# config/schemas/banco_239_loader.yaml
+
+loader_name: "BANCO_CTA_239"
+target_table: "raw_banco_239"
+batch_prefix: "BCO239-"
+
+# Input
+input_subfolder: "00. Banco_Cta_239/Principal_Bco_239"
+
+# Output (Carpetas Específicas)
+success_subfolder: "00. Banco_Cta_239_Processed/Principal_Bco_239_Processed"
+failed_subfolder: "00. Banco_Cta_239_failed/Principal_Bco_239_failed"
+
+# Configuración de Lectura
+header_row: 9  # Fila 10 en Excel (Python cuenta desde 0, así que 9)
+
+# Mapeo Excel -> SQL
+column_mapping:
+  "FECHA": "fecha_transaccion"
+  "REFERENCIA": "referencia"
+  "REFERENCIA2": "referencia2"
+  "DESCRIPCION": "descripcion"
+  "+/-": "signo_movimiento"
+  "VALOR": "valor"
+  "SALDO CONTABLE": "saldo_contable"
+  "SALDO DISPONIBLE": "saldo_disponible"
+  "OFICINA": "oficina"
+  "COD TRANSACCION": "cod_transaccion"
+
+required_columns:
+  - "FECHA"
+  - "VALOR"
+  - "SALDO CONTABLE"
+
+date_columns:
+  - "fecha_transaccion"

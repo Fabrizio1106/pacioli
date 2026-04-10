@@ -1,0 +1,13 @@
+# ══════════════════════════════════════════════════════════════════════════════
+# CONFIGURACIÓN: Withholdings Matcher (FASE 2)
+# UBICACIÓN: config/rules/staging_withholdings_matcher_rules.yaml
+# PROPÓSITO: Configuración para customer & invoice matching
+# ══════════════════════════════════════════════════════════════════════════════
+
+# NOTA: Este archivo es opcional
+# El matcher funciona sin configuración adicional
+# Solo se usa para evitar el warning de archivo no encontrado
+
+matching:
+  description: "Configuración de matching para retenciones"
+  version: "2.0"

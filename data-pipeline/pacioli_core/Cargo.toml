@@ -1,0 +1,19 @@
+[package]
+name = "pacioli_core"
+version = "0.1.0"
+edition = "2021"
+description = "Rust hot-path for PACIOLI — subset sum and fuzzy matching"
+
+[lib]
+name = "pacioli_core"
+crate-type = ["cdylib"]
+
+[dependencies]
+pyo3 = { version = "0.23", features = ["extension-module"] }
+
+# Optimizaciones de compilación para release
+[profile.release]
+opt-level = 3       # máxima optimización
+lto = true          # Link Time Optimization — analiza todo el código junto
+codegen-units = 1   # un solo chunk → mejor LTO (más lento compilar, más rápido ejecutar)
+panic = "abort"     # sin unwinding → binario más pequeño

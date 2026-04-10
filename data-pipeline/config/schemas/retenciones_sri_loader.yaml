@@ -1,0 +1,72 @@
+# config/schemas/retenciones_sri_loader.yaml
+loader_name: "RETENCIONES_SRI"
+target_table: "raw_retenciones_sri"
+batch_prefix: "RET-"
+
+# Input/Output
+input_subfolder: "05. retenciones"
+success_subfolder: "05. retenciones_processed"
+failed_subfolder: "05. retenciones_failed"
+
+# Configuración de Lectura
+header_row: 0
+sheet_name: 0  # <--- IMPORTANTE: 0 significa "Leer la primera hoja disponible", sin importar el nombre.
+
+# Mapeo Exacto (Excel Header -> SQL Column)
+# NOTA: Las claves aquí asumen que el código Python hizo .strip() (quitó espacios al inicio/final)
+# pero mantenemos los espacios INTERNOS y PUNTOS exactos de tu lista.
+column_mapping:
+  "Razon Social Emisor": "razon_social_emisor"
+  "RUC / CI Emisor": "ruc_emisor"
+  "RISE": "rise"
+  "RIMPE": "rimpe"
+  "Ag. Ret.": "agente_retencion"
+  "Obligado": "obligado_contabilidad"
+  "Cont Esp": "contribuyente_especial"
+  "Tipo Comp Sust": "tipo_comp_sustento"
+  "No. Comprobante Sustento": "num_comp_sustento"
+  "Fecha E  Comp Sustento": "fecha_emision_sustento"  # Ojo: Doble espacio en el original
+  
+  # Valores Monetarios
+  "Base Ret. Renta": "base_ret_renta"
+  "% Ret Renta": "porcentaje_ret_renta"
+  "Valor Ret. Renta": "valor_ret_renta"
+  
+  "Base Ret . IVA": "base_ret_iva"      # Ojo: Espacio antes del punto
+  "% Ret IVA": "porcentaje_ret_iva"
+  "Valor Ret IVA": "valor_ret_iva"
+  
+  "Base Ret. ISD": "base_ret_isd"
+  "% Ret ISD": "porcentaje_ret_isd"
+  "Valor Ret. ISD": "valor_ret_isd"     # El Python quitará el espacio final, así que aquí va sin espacio
+  
+  # Datos Retención
+  "Serie Comprobante Retención": "serie_comprobante_ret"
+  "Número Secuencial Retención": "num_secuencial_ret"
+  "Fecha de Emisión Retención": "fecha_emision_ret"
+  "Fecha de autorización Retención": "fecha_autorizacion_ret"
+  "Periodo Fiscal": "periodo_fiscal"
+  
+  # Claves y Auditoría
+  "Clave Acceso": "clave_acceso"
+  "Estado": "estado_sri"
+  "Número Autorización del Comprobante Sustento": "num_autorizacion"
+  "Info Adicional": "info_adicional"
+  "Nombre Archivo": "nombre_archivo_origen"
+
+# Columnas para el Hash Robusto (Idempotencia)
+hash_columns:
+  - "Razon Social Emisor"
+  - "RUC / CI Emisor"
+  - "No. Comprobante Sustento"
+  - "Valor Ret IVA"
+  - "Fecha de autorización Retención"
+  - "Serie Comprobante Retención"
+  - "Número Secuencial Retención"
+  - "Clave Acceso"
+
+# Columnas que son fechas y deben parsearse
+date_columns:
+  - "Fecha E  Comp Sustento"
+  - "Fecha de Emisión Retención"
+  - "Fecha de autorización Retención"

@@ -1,0 +1,462 @@
+# ============================================================================
+# CONFIGURACIÓN DE CONCILIACIÓN BANCARIA - V2.2 (ENTERPRISE + CARD SETTLEMENTS)
+# UBICACION: 02. BalanceIQ/config/rules/reconciliation_config.yaml
+# ============================================================================
+
+# --- CONFIGURACIÓN GENERAL ---
+general:
+  tolerance_threshold: 0.05
+  max_invoices_per_match: 15  # Límite de facturas en una combinación
+  max_combinations_to_try: 5000  # Timeout protection
+  recent_invoices_days: 90  # Solo considerar facturas de últimos X días
+
+# ════════════════════════════════════════════════════════════════════════════
+# CARD SETTLEMENTS - Liquidaciones de Tarjetas de Crédito (v2.1 → v2.2)
+# ════════════════════════════════════════════════════════════════════════════
+card_settlements:
+  # Trans type que identifica liquidaciones de tarjetas
+  target_trans_type: 'LIQUIDACION TC'
+  
+  # Tolerancia específica para tarjetas (usa general.tolerance_threshold si no se especifica)
+  tolerance: 0.05
+  
+  # Configuración de scoring específico para tarjetas
+  scoring:
+    # Peso para match individual (1 tx banco = 1 settlement)
+    individual_match_weight: 100
+    
+    # Peso para split payment (N tx banco = 1 settlement)
+    split_payment_weight: 95
+    
+    # Penalización por voucher count mismatch
+    count_mismatch_penalty: 20
+    
+    # Bonus por match exacto de montos
+    exact_amount_bonus: 5
+  
+  # Reglas de sincronización de settlements
+  settlement_sync:
+    # Si alguna tx del settlement está en REVIEW → settlement = REVIEW
+    review_priority: true
+    
+    # Tolerancia para considerar settlement MATCHED
+    amount_match_tolerance: 0.05
+    
+    # Estados de settlement a NO sobrescribir (protección)
+    preserve_statuses:
+      - 'MATCHED_MANUAL'
+      - 'MATCHED'
+    
+    # Actualizar automáticamente v2_stg_card_settlements
+    auto_update_settlements: true
+  
+  # Reglas de ajuste de comisión
+  commission_adjustment:
+    # Permitir ajuste automático de comisión
+    enabled: true
+    
+    # Solo si diferencia <= tolerance
+    max_adjustment: 0.05
+    
+    # Registrar ajustes en audit log
+    log_adjustments: true
+  
+  # Reglas de negocio específicas para tarjetas
+  business_rules:
+    # Ignorar diferencias de centavos en estos establecimientos
+    penny_tolerance_for:
+      - 'DINERS CLUB'
+      - 'AMERICAN EXPRESS'
+      - 'VISA'
+      - 'MASTERCARD'
+    
+    # Requerir validación manual para estos casos
+    always_review_if:
+      orphan_settlement: true  # Settlement sin portfolio
+      count_mismatch_large: true  # Diferencia > 10 vouchers
+      amount_mismatch_large: true  # Diferencia > $100
+
+# ════════════════════════════════════════════════════════════════════════════
+# CARD SETTLEMENT REASONS - Razones específicas para tarjetas (NUEVO v2.2)
+# ════════════════════════════════════════════════════════════════════════════
+card_settlement_reasons:
+  # ═══════════════════════════════════════════════════════════
+  # MATCHED CASES - Match exitoso
+  # ═══════════════════════════════════════════════════════════
+  perfect_match: "CARD_PERFECT_MATCH"
+  # Match perfecto: diff = 0, count match (VIP/ASISTENCIAS)
+  # o diff = 0 (PARKING/URBAPARKING)
+  
+  split_payment: "CARD_SPLIT_PAYMENT"
+  # Split payment detectado (PACIFICARD): N transacciones banco → 1 settlement
+  # Prorrateo aplicado exitosamente
+  
+  prorate_match: "CARD_PRORATE_MATCH"
+  # Prorrateo aplicado y match dentro de tolerancia
+  
+  amount_within_tolerance: "CARD_AMOUNT_WITHIN_TOLERANCE"
+  # Diferencia pequeña dentro de tolerancia (≤ $0.05)
+  # Usado cuando no es split pero hay ajuste menor
+  
+  # ═══════════════════════════════════════════════════════════
+  # REVIEW CASES - Requiere validación manual
+  # ═══════════════════════════════════════════════════════════
+  voucher_count_mismatch: "CARD_VOUCHER_COUNT_MISMATCH"
+  # VIP/ASISTENCIAS: Count de vouchers NO coincide
+  # Banco: X vouchers, Portfolio: Y facturas
+  
+  amount_mismatch_small: "CARD_AMOUNT_MISMATCH_SMALL"
+  # Diferencia de monto pequeña (> tolerance pero < 2x tolerance)
+  # Entre $0.05 y $0.10
+  
+  amount_mismatch_large: "CARD_AMOUNT_MISMATCH_LARGE"
+  # Diferencia de monto grande (> 2x tolerance)
+  # Mayor a $0.10
+  
+  parking_amount_diff: "CARD_PARKING_AMOUNT_DIFF"
+  # PARKING: Diferencia detectada
+  # (PARKING requiere match exacto idealmente)
+  
+  commission_adjusted: "CARD_COMMISSION_ADJUSTED"
+  # Match exitoso pero requirió ajuste de comisión
+  # Revisar si el ajuste es correcto
+  
+  # ═══════════════════════════════════════════════════════════
+  # PENDING CASES - Sin match o datos incompletos
+  # ═══════════════════════════════════════════════════════════
+  no_portfolio_data: "CARD_NO_PORTFOLIO_DATA"
+  # Settlement sin datos en v2_stg_customer_portfolio
+  # Cartera vacía para este settlement_id
+  
+  orphan_settlement: "CARD_ORPHAN_SETTLEMENT"
+  # Settlement sin transacciones banco asociadas
+  # (Caso raro, indica problema en enrichment)
+  
+  zero_invoices: "CARD_ZERO_INVOICES"
+  # Count de facturas = 0 en portfolio
+  # Settlement existe pero sin invoices matched
+
+# ════════════════════════════════════════════════════════════════════════════
+# CARD SETTLEMENT MESSAGES - Mensajes descriptivos para enrich_notes (NUEVO v2.2)
+# ════════════════════════════════════════════════════════════════════════════
+card_settlement_messages:
+  # ═══════════════════════════════════════════════════════════
+  # MATCHED
+  # ═══════════════════════════════════════════════════════════
+  perfect_match: "Tarjeta: Match perfecto - Settlement {settlement_id}, Diff: ${diff}, Vouchers: {bank_count}/{port_count}"
+  
+  split_payment: "Tarjeta: Split payment - {tx_count} transacciones banco para settlement {settlement_id}, Prorrateo aplicado"
+  
+  prorate_match: "Tarjeta: Prorrateo proporcional aplicado - Settlement {settlement_id}, {tx_count} partes, Diff final: ${diff}"
+  
+  amount_within_tolerance: "Tarjeta: Match con tolerancia - Settlement {settlement_id}, Diff: ${diff} (≤ ${tolerance})"
+  
+  # ═══════════════════════════════════════════════════════════
+  # REVIEW
+  # ═══════════════════════════════════════════════════════════
+  voucher_count_mismatch: "Tarjeta: Voucher mismatch - Banco: {bank_count}, Portfolio: {port_count}, Diff monto: ${diff}"
+  
+  amount_mismatch_small: "Tarjeta: Diferencia pequeña - ${diff} (tolerancia: ${tolerance}), Revisar comisiones"
+  
+  amount_mismatch_large: "Tarjeta: Diferencia grande - ${diff}, Requiere investigación"
+  
+  parking_amount_diff: "Tarjeta PARKING: Diferencia ${diff} - Validar facturación original"
+  
+  commission_adjusted: "Tarjeta: Comisión ajustada en ${adjustment}, Validar corrección"
+  
+  # ═══════════════════════════════════════════════════════════
+  # PENDING
+  # ═══════════════════════════════════════════════════════════
+  no_portfolio_data: "Tarjeta: Settlement {settlement_id} sin datos en cartera - Verificar ProcessCustomerPortfolio F2/F3"
+  
+  orphan_settlement: "Tarjeta: Settlement {settlement_id} sin transacciones banco - Revisar enrichment"
+  
+  zero_invoices: "Tarjeta: Settlement {settlement_id} sin facturas matched - Verificar matching de cartera"
+
+# --- SCORING WEIGHTS (Total debe sumar 100) ---
+scoring_weights:
+  exact_amount_match: 40      # Peso de coincidencia exacta de monto
+  tolerance_match: 30          # Peso de coincidencia con tolerancia
+  date_proximity: 15           # Peso de proximidad temporal
+  invoice_continuity: 10       # Peso de continuidad (sin gaps)
+  reference_match: 5           # Peso de coincidencia en referencias
+
+# --- THRESHOLDS DE CLASIFICACIÓN ---
+confidence_thresholds:
+  auto_match_minimum: 90       # Score mínimo para MATCHED automático
+  review_minimum: 60           # Score mínimo para REVIEW (sino es PENDING)
+  ambiguous_threshold: 50      # Debajo de esto = muy ambiguo
+
+# --- REGLAS DE NEGOCIO (BUSINESS LOGIC) ---
+business_logic:
+  # Establecimientos especiales
+  special_handling:
+    urbaparking:
+      customer_id: "400419"
+      exact_match_required: true  # No tolerancia para parking
+      use_greedy_strategy: true
+      max_gap_allowed: 0
+  
+  # Exclusiones de Cartera (Notificaciones)
+  portfolio_exclusions:
+    prefixes:
+      - "N2-"
+      - "N3-"
+      - "N4-"
+  
+  # Ignorar conteo de vouchers (CONSOLIDADO - incluye card_settlements)
+  ignore_voucher_count_for:
+    - "PARKING"
+    - "URBAPARKING"
+    - "SALAS VIP"
+  
+  # Shadow Matching (auto-cierre)
+  shadow_match_reasons:
+    sap_closed: "CLOSED_IN_SOURCE_SAP"
+    intraday_offset: "AUTO_OFFSETTING_ENTRY"
+
+# --- ESTRATEGIAS DE MATCHING (En orden de ejecución) ---
+matching_strategies:
+  # Fase 0: Tarjetas (v2.1) - Ejecuta PRIMERO
+  phase_0_cards:
+    - name: "card_settlement_match"
+      enabled: true
+      confidence_base: 95
+      process_first: true
+      exclusive_trans_type: "LIQUIDACION TC"
+      description: "Match por settlement_id con agregación de portfolio"
+  
+  # Fase 1: Determinístico
+  phase_1_deterministic:
+    - name: "exact_single_match"
+      enabled: true
+      confidence_base: 100
+    
+    - name: "tolerance_single_match"
+      enabled: true
+      confidence_base: 95
+      tolerance: 0.05
+    
+    - name: "exact_contiguous_multi_match"
+      enabled: true
+      confidence_base: 92
+  
+  # Fase 2: Probabilístico
+  phase_2_probabilistic:
+    - name: "greedy_sequential_match"
+      enabled: true
+      confidence_base: 85
+      tolerance: 0.05
+      max_invoices: 15
+    
+    - name: "subset_sum_contiguous"
+      enabled: true
+      confidence_base: 75
+      max_gap: 0
+      max_invoices: 20
+    
+    - name: "subset_sum_with_gaps"
+      enabled: true
+      confidence_base: 65
+      max_gap: 3
+      max_invoices: 20
+    
+    - name: "best_effort_match"
+      enabled: true
+      confidence_base: 50
+      max_invoices: 20
+
+  # Fase 3: Especial
+  phase_3_special:
+    - name: "multi_payment_same_day"
+      enabled: true
+      confidence_base: 70
+
+# --- FASE 4.5: ESTRATEGIAS ESPECIALES OPTIMIZADAS ---
+special_cases:
+  urbaparking:
+    customer_id: "400419"
+    tolerance: 0.00
+    strategy: "exact_with_residuals"
+    max_residual_combinations: 1000
+  
+  salas_vip:
+    customer_id: "999999"
+    tolerance: 0.05
+    strategy: "user_grouping"
+    brand_filter: "EFECTIVO"
+    max_date_range_days: 2
+  
+  exterior:
+    tolerance_multiplier: 3
+
+multi_payment:
+  time_window_hours: 24
+  max_payments_per_group: 10
+  max_invoices_to_consider: 50
+  max_permutations: 1000
+  strategy: "two_pass_backtracking"
+  use_backtracking: true
+  
+# --- ESTADOS DEL SISTEMA ---
+status:
+  matched: "MATCHED"
+  matched_manual: "MATCHED_MANUAL"
+  review: "REVIEW"
+  pending: "PENDING"
+  partial: "PARTIAL_MATCH"
+
+# --- RAZONES DE CONCILIACIÓN (EXPANDIDAS CON TARJETAS v2.1 → v2.2) ---
+reasons:
+  # Determinísticas (Alta confianza)
+  perfect_match: "PERFECT_MATCH"
+  penny_adjustment: "PENNY_ADJUSTMENT"
+  
+  # Tarjetas (v2.1 - Deprecado, usar card_settlement_reasons)
+  card_perfect_match: "CARD_PERFECT_MATCH"
+  card_split_payment: "SPLIT_PAYMENT_MATCH"
+  card_voucher_mismatch: "VOUCHER_COUNT_MISMATCH"
+  card_amount_mismatch: "CARD_AMOUNT_MISMATCH"
+  card_orphan_settlement: "NO_PORTFOLIO_DATA"
+  has_suggestions: 'CARD_HAS_SUGGESTIONS'
+  only_suggestions: 'CARD_ONLY_SUGGESTIONS'
+  
+  # Probabilísticas (Media confianza)
+  split_batch: "SPLIT_BATCH_MATCH"
+  fifo_match: "FIFO_INVOICE_MATCH"
+  greedy_match: "GREEDY_SEQUENTIAL_MATCH"
+  subset_match: "SUBSET_SUM_MATCH"
+  
+  # Especiales
+  parking_match: "PARKING_BATCH_MATCH"
+  multi_payment_match: "MULTI_PAYMENT_MATCH"
+  
+  # Requieren revisión
+  human_validation: "REQUIRES_HUMAN_VALIDATION"
+  amount_mismatch: "AMOUNT_MISMATCH"
+  count_mismatch: "VOUCHER_COUNT_MISMATCH"
+  ambiguous: "AMBIGUOUS_MATCH"
+  
+  # Sin match
+  no_portfolio: "NO_PORTFOLIO_DATA"
+  orphan: "ORPHAN_ROW"
+
+# --- MENSAJES EXPLICATIVOS (Para enrich_notes) ---
+messages:
+  # Generales
+  perfect_match: "Match exacto 1:1"
+  penny_adjustment: "Match con ajuste de centavos (±{diff})"
+  greedy_match: "Match secuencial desde factura más antigua"
+  subset_match: "Match por combinación óptima. Gap facturas: {gap_count}"
+  multi_payment_match: "{payment_count} pagos mismo día. Asignación por scoring"
+  partial_payment: "Pago parcial. Deuda pendiente: ${remaining}"
+  no_invoices: "Cliente sin facturas abiertas"
+  amount_higher: "Pago excede deuda total. Diferencia: ${diff}"
+  amount_lower: "Pago menor a deuda total. Diferencia: ${diff}"
+  has_suggestions: 'Tarjeta: {bank_count} vouchers, {port_count} confirmados, {suggestions_count} sugerencias - Diff: ${diff} - Revisar'
+  only_suggestions: 'Tarjeta: Solo sugerencias - Requiere validación completa'
+  
+  # Parking
+  parking_exact: "URBAPARKING - Match exacto requerido"
+  parking_mismatch: "URBAPARKING - Diferencia detectada. Revisar facturación"
+  
+  # Tarjetas (v2.1 - Deprecado, usar card_settlement_messages)
+  card_matched: "Tarjeta: Match con settlement {settlement_id}"
+  card_split: "Tarjeta: {count} transacciones para settlement {settlement_id}"
+  card_voucher_diff: "Tarjeta: Vouchers banco ({bank_count}) vs portfolio ({port_count})"
+  card_commission_adjusted: "Tarjeta: Comisión ajustada en ${adjustment}"
+  card_no_portfolio: "Tarjeta: Settlement {settlement_id} sin datos en portfolio"
+  card_amount_diff: "Tarjeta: Diferencia ${diff} excede tolerancia"
+
+# ════════════════════════════════════════════════════════════════════════════
+# CONFIGURACIÓN DE AUDITORÍA (OPCIONAL)
+# ════════════════════════════════════════════════════════════════════════════
+audit:
+  # Registrar todas las decisiones de matching
+  log_all_matches: true
+  
+  # Registrar ajustes de comisión (especialmente importante para tarjetas)
+  log_commission_adjustments: true
+  
+  # Registrar sincronizaciones de settlement
+  log_settlement_updates: true
+  
+  # Tabla de auditoría
+  audit_table: "etl_reconciliation_audit"
+
+# ════════════════════════════════════════════════════════════════════════════
+# CONFIGURACIÓN DE PERFORMANCE
+# ════════════════════════════════════════════════════════════════════════════
+performance:
+  # Batch size para actualizaciones masivas
+  bulk_update_batch_size: 1000
+  
+  # Timeout para queries complejas (segundos)
+  query_timeout: 300
+  
+  # Límite de memoria para subset sum
+  max_memory_mb: 512
+
+# ══════════════════════════════════════════════════════════════════
+# SALAS VIP STRATEGY v11.0 - Two-Phase Matching Configuration
+# ══════════════════════════════════════════════════════════════════
+
+salas_vip_matching:
+  # Habilitar split detection (Fase 2)
+  enable_split_detection: true
+  
+  # Threshold de validación (70% = aprobar si 7 de 10 matchean)
+  min_match_rate: 0.70
+  
+  # Máximo de depósitos que pueden consolidarse en 1 cierre
+  max_deposits_per_split: 3
+  
+  # Ventana de tiempo (minutos) entre depósitos de un split
+  split_time_window_minutes: 10
+  
+  # Tolerancia de monto
+  tolerance: 0.05
+  
+  # Máximo de facturas por combinación
+  max_invoices_per_combination: 10
+
+
+# Configuración de residuos
+residuals_reconciliation:
+  enabled: true                  # Habilitar/deshabilitar
+  max_date_window_days: 3        # Ventana temporal ±N días
+  max_invoices: 5                # Máximo facturas por match
+
+# ════════════════════════════════════════════════════════════════════════════
+# TOLERANCIA VIP CASCADE ALGORITHM
+# ════════════════════════════════════════════════════════════════════════════
+
+vip_tolerance_cents: 5   # $0.05 — diferencia máxima absorbible en comisión
+
+# ════════════════════════════════════════════════════════════════════════════
+# NOTAS DE VERSIÓN
+# ════════════════════════════════════════════════════════════════════════════
+# v2.2 (2026-03-01):
+# - ✅ Agregada sección card_settlement_reasons (reasons específicos con prefijo CARD_)
+# - ✅ Agregada sección card_settlement_messages (mensajes descriptivos para enrich_notes)
+# - ✅ Separación clara entre reasons de ReconcileBankTransactions vs UpdateBankValidationMetrics
+# - ✅ Prefijo CARD_ para identificación clara de origen
+# - ✅ Soporte para split payments con prorrateo
+# - ✅ Reglas diferenciadas PARKING vs VIP/ASISTENCIAS
+# - ✅ Deprecación gradual de reasons en sección "reasons" (usar card_settlement_reasons)
+#
+# v2.1 (2026-02-28):
+# - ✅ Agregada sección card_settlements completa
+# - ✅ Phase 0 para procesar tarjetas PRIMERO
+# - ✅ Scoring específico para tarjetas
+# - ✅ Reglas de sincronización de settlements
+# - ✅ Reglas de ajuste de comisión automático
+# - ✅ Mensajes específicos para tarjetas
+# - ✅ Razones de conciliación expandidas
+# - ✅ Exclusividad: CardMatcher procesa SOLO LIQUIDACION TC
+# - ✅ ReconciliationMatcherService procesa TODO EXCEPTO LIQUIDACION TC
+#
+# v2.0 (Anterior):
+# - Estrategias de matching por fases
+# - Multi-payment con backtracking
+# - Casos especiales optimizados

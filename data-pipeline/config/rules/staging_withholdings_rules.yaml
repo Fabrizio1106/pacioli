@@ -1,0 +1,350 @@
+# ══════════════════════════════════════════════════════════════════════════════
+# CONFIGURACIÓN: Retenciones SRI - Reglas de Negocio
+# ARCHIVO: staging_withholdings_rules.yaml
+# UBICACIÓN: config/rules/staging_withholdings_rules.yaml
+# PROPÓSITO: Reglas de validación, matching y limpieza de retenciones
+# VERSIÓN: 1.0
+# ══════════════════════════════════════════════════════════════════════════════
+
+# ══════════════════════════════════════════════════════════════════════════════
+# LIMPIEZA Y NORMALIZACIÓN
+# ══════════════════════════════════════════════════════════════════════════════
+data_cleaning:
+  # Campos de texto a limpiar (strip, uppercase, normalize)
+  text_fields:
+    - razon_social_emisor
+    - ruc_emisor
+    - num_comp_sustento
+    - serie_comprobante_ret
+    - num_secuencial_ret
+    - estado_sri
+  
+  # Campos numéricos a redondear
+  numeric_fields:
+    - base_ret_renta
+    - porcentaje_ret_renta
+    - valor_ret_renta
+    - base_ret_iva
+    - porcentaje_ret_iva
+    - valor_ret_iva
+  
+  decimal_places: 2
+  
+  # Normalización de nombres de cliente
+  customer_name_normalization:
+    # Remover estas palabras
+    remove_words:
+      - "CIA."
+      - "CIA"
+      - "LTDA."
+      - "LTDA"
+      - "S.A."
+      - "S.A"
+      - "C.A."
+      - "C.A"
+      - "COMPAÑIA"
+      - "COMPANIA"
+      - "SOCIEDAD ANONIMA"
+    
+    # Reemplazos específicos
+    replacements:
+      "Ñ": "N"
+      "Á": "A"
+      "É": "E"
+      "Í": "I"
+      "Ó": "O"
+      "Ú": "U"
+    
+    # Caracteres a eliminar
+    remove_chars: [".", ",", "-", "'", '"']
+
+# ══════════════════════════════════════════════════════════════════════════════
+# EXTRACCIÓN DE SERIES Y REFERENCIAS
+# ══════════════════════════════════════════════════════════════════════════════
+series_extraction:
+  # Patrón para detectar series de factura
+  # Formato: 003-029-000123456
+  invoice_pattern: '(\d{3})-(\d{3})-(\d{9})'
+  
+  # Series consideradas REGISTRABLES (para F-30 SAP)
+  registrable_series:
+    - "003-029"  # Punto de emisión Aeropuerto
+  
+  # Series para AUDITORÍA SOLAMENTE (no se registran)
+  audit_only_series:
+    - "003-079"  # Punto alternativo
+    - "003-060"  # Otros puntos
+    - "003-081"  # Otros puntos
+    - "003-075"  # Otros puntos
+    - "003-056"  # Otros puntos
+    - "003-059"  # Otros puntos
+  
+  # Documentos especiales (no tienen serie estándar)
+  special_documents:
+    - "RECAP"    # Liquidaciones TC
+    - "000-000"  # Documentos internos
+
+# ══════════════════════════════════════════════════════════════════════════════
+# CLASIFICACIÓN POR SERIE (FASE 1)
+# ══════════════════════════════════════════════════════════════════════════════
+series_classification:
+  # En FASE 1 solo determinamos si la serie es registrable
+  # La evaluación de ELEGIBILIDAD se hace en FASE 4 (después de matching)
+  
+  registrable_series: "003-029"
+  action: SET_IS_REGISTRABLE_FLAG
+  
+  states:
+    registrable: "NEW"                    # Serie 003-029 → puede intentar matching
+    non_registrable: "NON_REGISTRABLE_SERIES"  # Otras series → solo auditoría
+
+# ══════════════════════════════════════════════════════════════════════════════
+# REGLAS DE ELEGIBILIDAD (FASE 4 - Business Rules Validator)
+# ══════════════════════════════════════════════════════════════════════════════
+# NOTA: Estas reglas NO se aplican en FASE 1 (staging)
+# Se aplican en FASE 4, después de hacer matching de cliente y factura
+# ══════════════════════════════════════════════════════════════════════════════
+business_rules:
+  
+  # ════════════════════════════════════════════════════════════════════════════
+  # IMPORTANTE: Estas reglas NO se usan en FASE 1
+  # Se implementarán en FASE 4 (Business Rules Validator)
+  # ════════════════════════════════════════════════════════════════════════════
+  
+  # REGLAS DE ELEGIBILIDAD (Para FASE 4)
+  eligibility_rules:
+    
+    # REGLA 1: Ya verificada en FASE 1 (is_registrable = TRUE)
+    # Serie debe ser 003-029
+    
+    # REGLA 2: Retención Renta porcentaje debe ser 0
+    rule_renta_percentage_zero:
+      field: porcentaje_ret_renta
+      condition: MUST_BE_ZERO
+      tolerance: 0.01
+      if_fail:
+        reason: "RENTA_PERCENTAGE_NOT_ZERO"
+        message: "Porcentaje renta debe ser 0% (Zona Franca). Recibido: {actual}%"
+    
+    # REGLA 3: Retención Renta valor debe ser 0
+    rule_renta_value_zero:
+      field: valor_ret_renta
+      condition: MUST_BE_ZERO
+      tolerance: 0.01
+      if_fail:
+        reason: "RENTA_VALUE_NOT_ZERO"
+        message: "Valor renta debe ser $0 (Zona Franca). Recibido: ${actual}"
+    
+    # REGLA 4: Retención IVA porcentaje debe ser > 0
+    rule_iva_percentage_exists:
+      field: porcentaje_ret_iva
+      condition: MUST_BE_GREATER_THAN_ZERO
+      if_fail:
+        reason: "NO_IVA_PERCENTAGE"
+        message: "Porcentaje IVA es 0%, no hay retención para aplicar"
+    
+    # REGLA 5: Retención IVA valor debe ser > 0
+    rule_iva_value_exists:
+      field: valor_ret_iva
+      condition: MUST_BE_GREATER_THAN_ZERO
+      if_fail:
+        reason: "NO_IVA_VALUE"
+        message: "Valor IVA es $0, no hay retención para aplicar"
+    
+    # REGLA 6 (INFORMATIVA): Porcentaje IVA estándar = 20%
+    # Esta es solo informativa, NO descalifica
+    rule_iva_standard_percentage:
+      field: porcentaje_ret_iva
+      condition: SHOULD_EQUAL
+      value: 20.0
+      tolerance: 0.01
+      severity: WARNING  # Solo alerta, no descalifica
+      if_fail:
+        reason: "NON_STANDARD_PERCENTAGE"
+        message: "Porcentaje IVA no estándar: {actual}% (esperado: 20%)"
+
+
+# ══════════════════════════════════════════════════════════════════════════════
+# CUSTOMER MATCHING ENGINE
+# ══════════════════════════════════════════════════════════════════════════════
+customer_matching:
+  # Orden de ejecución de las capas
+  execution_order:
+    - EXACT_RUC
+    - FUZZY_NAME
+    - PARTIAL_RUC
+    - MANUAL_REVIEW
+  
+  # Capa 1: Match exacto por RUC
+  EXACT_RUC:
+    field: ruc_emisor
+    target_table: dim_customers
+    target_field: tax_id
+    confidence: EXACT
+    min_score: 100
+  
+  # Capa 2: Match fuzzy por nombre
+  FUZZY_NAME:
+    field: customer_name_normalized
+    target_table: dim_customers
+    target_field: customer_name_normalized
+    algorithm: LEVENSHTEIN
+    confidence: FUZZY
+    min_score: 85
+    max_distance: 3  # Máximo 3 caracteres de diferencia
+  
+  # Capa 3: Match parcial por RUC (dígito verificador diferente)
+  PARTIAL_RUC:
+    field: ruc_emisor
+    target_table: dim_customers
+    target_field: tax_id
+    strategy: FIRST_12_DIGITS
+    confidence: FUZZY
+    min_score: 70
+  
+  # Capa 4: Revisión manual
+  MANUAL_REVIEW:
+    confidence: UNMATCHED
+    action: CREATE_EXCEPTION
+    exception_type: CUSTOMER_NOT_FOUND
+
+# ══════════════════════════════════════════════════════════════════════════════
+# INVOICE MATCHING ENGINE
+# ══════════════════════════════════════════════════════════════════════════════
+invoice_matching:
+  # Estrategia de búsqueda en cartera
+  search_strategy:
+    # Paso 1: Filtrar por cliente
+    filter_by_customer: true
+    
+    # Paso 2: Buscar por assignment (últimos 6 dígitos)
+    search_by_assignment:
+      use_last_digits: 6
+      pattern: "%{last_6_digits}%"
+    
+    # Paso 3: Validar estado de cartera
+    valid_statuses:
+      - PENDING
+      - MATCH_DATOS
+    
+    # Paso 4: Validar monto disponible
+    validate_amount:
+      check: "conciliable_amount > 0"
+      tolerance_pct: 5  # 5% de tolerancia
+  
+  # Qué hacer si no encuentra match
+  no_match_action:
+    reconcile_status: UNMATCHED
+    create_exception: true
+    exception_type: INVOICE_NOT_FOUND
+
+# ══════════════════════════════════════════════════════════════════════════════
+# MAPEO DE COLUMNAS (Raw → Staging)
+# ══════════════════════════════════════════════════════════════════════════════
+column_mapping:
+  # Identity
+  hash_id: hash_id
+  clave_acceso: clave_acceso
+  
+  # Customer
+  customer_ruc: ruc_emisor
+  customer_name_raw: razon_social_emisor
+  
+  # Invoice ref
+  invoice_ref_sustento: num_comp_sustento
+  
+  # Amounts
+  base_ret_renta: base_ret_renta
+  porcentaje_ret_renta: porcentaje_ret_renta
+  valor_ret_renta: valor_ret_renta
+  base_ret_iva: base_ret_iva
+  porcentaje_ret_iva: porcentaje_ret_iva
+  valor_ret_iva: valor_ret_iva
+  
+  # Dates
+  fecha_emision_ret: fecha_emision_ret
+  fecha_autorizacion_ret: fecha_autorizacion_ret
+  periodo_fiscal: periodo_fiscal
+  
+  # Attributes
+  rise: rise
+  rimpe: rimpe
+  agente_retencion: agente_retencion
+  obligado_contabilidad: obligado_contabilidad
+  contribuyente_especial: contribuyente_especial
+  
+  # Metadata
+  source_batch_id: batch_id
+
+# ══════════════════════════════════════════════════════════════════════════════
+# GENERACIÓN DE REFERENCIAS
+# ══════════════════════════════════════════════════════════════════════════════
+reference_generation:
+  # withholding_ref = serie_comprobante_ret + "-" + num_secuencial_ret
+  # Ejemplo: 001-222-0004175
+  withholding_ref_format: "{serie}-{secuencial}"
+  
+  # Limpiar serie (remover espacios, guiones extra)
+  serie_clean: true
+  
+  # Pad secuencial con ceros (7 dígitos)
+  secuencial_pad_length: 7
+
+# ══════════════════════════════════════════════════════════════════════════════
+# CLIENTES ESPECIALES (Excepciones Conocidas)
+# ══════════════════════════════════════════════════════════════════════════════
+special_customers:
+  # BANCO DINERS - Liquidaciones RECAP
+  "1790283380001":
+    name: "BANCO DINERS CLUB DEL ECUADOR S.A."
+    sap_code: "PENDIENTE"  # TODO: Obtener de dim_customers
+    expected_percentage: 20
+    expected_renta: 0
+    notes: "~90% del volumen, siempre RECAP"
+  
+  # SALUDSA - Porcentaje 0 (caso especial)
+  "1791257049001":
+    name: "SALUDSA SISTEMA DE MEDICINA PREPAGADA"
+    sap_code: "PENDIENTE"
+    expected_percentage: 0  # Excepción conocida
+    expected_renta: 0
+    notes: "No retiene IVA por tipo de servicio"
+
+# ══════════════════════════════════════════════════════════════════════════════
+# CONFIGURACIÓN DE LOGGING
+# ══════════════════════════════════════════════════════════════════════════════
+logging:
+  log_level: INFO
+  
+  # Eventos a registrar
+  log_events:
+    - sync_start
+    - sync_end
+    - validation_errors
+    - matching_results
+    - exceptions_created
+  
+  # Métricas a calcular
+  metrics:
+    - total_records
+    - new_records
+    - duplicates_skipped
+    - validation_pass_rate
+    - match_rate
+    - exception_count
+
+# ══════════════════════════════════════════════════════════════════════════════
+# CONFIGURACIÓN DE SYNC (Delta Strategy)
+# ══════════════════════════════════════════════════════════════════════════════
+sync_strategy:
+  # Estrategia: Incremental por clave_acceso
+  mode: INCREMENTAL
+  unique_key: clave_acceso
+  
+  # Comportamiento ante duplicados
+  on_duplicate:
+    action: SKIP
+    log_warning: true
+  
+  # Ventana de procesamiento (días hacia atrás)
+  lookback_days: 90

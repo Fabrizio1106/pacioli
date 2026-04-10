@@ -1,0 +1,255 @@
+description: "Reglas de Negocio - Smart Matching con Validación"
+version: "FINAL-1.0"
+
+# =============================================================================
+# CONFIGURACIÓN FINAL - SMART MATCHING + VALIDACIÓN
+# =============================================================================
+# Características:
+# - Solo usa bank_ref_2 (ignora bank_description)
+# - Prioridad: Histórico > Maestro > Portfolio
+# - Validación cruzada con maestro SAP
+# - Filtrado de data sucia
+# - Smart scoring (core + WRatio)
+# - Datos 100% limpios y validados
+# =============================================================================
+
+# -----------------------------------------------------------------------------
+# 1. REGLAS DETERMINISTAS (TARJETAS DE CRÉDITO - BRAND)
+# -----------------------------------------------------------------------------
+card_rules:
+  target_trans_type: "LIQUIDACION TC"
+  brands:
+    PACIFICARD:
+      customer_id: "400489"
+      customer_name: "MASTERCARD PACIFICO"
+      confidence: 100
+      method: "FIXED_BRAND_RULE"
+    
+    AMEX:
+      customer_id: "400490"
+      customer_name: "AMERICAN EXPRESS"
+      confidence: 100
+      method: "FIXED_BRAND_RULE"
+    
+    VISA:
+      customer_id: "400487"
+      customer_name: "DINERS CLUB ECUADOR"
+      confidence: 100
+      method: "FIXED_BRAND_RULE"
+    
+    DINERS CLUB:
+      customer_id: "400487|400492"
+      customer_name: "DINERS CLUB ECUADOR"
+      confidence: 100
+      method: "FIXED_BRAND_RULE"
+
+# -----------------------------------------------------------------------------
+# 2. REGLAS DETERMINISTAS DE TEXTO (TEXTO EXACTO EN REFERENCIA)
+# -----------------------------------------------------------------------------
+# NOTA: Estas son reglas de parche temporal para casos difíciles de mapear
+#       debido a caracteres especiales o truncamiento en bank_ref_2
+#       A futuro, limpiar stg_historical_collection_training_dataset
+# -----------------------------------------------------------------------------
+specific_text_rules:
+  "DIVISION TARJET":
+    id: "400499"
+    name: "BANCO BOLIVARIANO"
+    confidence: 100
+    method: "SPECIFIC_TEXT_RULE"
+  
+  # Casos con caracteres especiales / difíciles de mapear
+  "KLM":
+    id: "400068"
+    name: "KLM CIA REAL HOLANDESA DE AVIA"
+    confidence: 100
+    method: "SPECIFIC_TEXT_RULE"
+  
+  "BUPA ECUADOR SA COMPANIA DE SE":
+    id: "402302"
+    name: "BUPA ECUADOR SOCIEDAD ANONIMA"
+    confidence: 100
+    method: "SPECIFIC_TEXT_RULE"
+  
+  "FIDEICOMISO MERCANTIL HOTEL AE":
+    id: "401696"
+    name: "FIDEICOMISO MERCANTIL HOTEL AEROPUE"
+    confidence: 100
+    method: "SPECIFIC_TEXT_RULE"
+  
+  "GENTIAN TRAILS THE AUTHENTIC E":
+    id: "400336"
+    name: "GENTIAN TRAILS"
+    confidence: 100
+    method: "SPECIFIC_TEXT_RULE"
+  
+  "GENTiAN TRAiLS THE AUTHENTiC E":
+    id: "400336"
+    name: "GENTIAN TRAILS"
+    confidence: 100
+    method: "SPECIFIC_TEXT_RULE"
+  
+  "FIDEICOMISO AEROQUITOSERV":
+    id: "400069"
+    name: "AEROQUITOSERV S.A."
+    confidence: 100
+    method: "SPECIFIC_TEXT_RULE"
+  
+  "FiDEiCOMiSO AEROQUiTOSERV":
+    id: "400069"
+    name: "AEROQUITOSERV S.A."
+    confidence: 100
+    method: "SPECIFIC_TEXT_RULE"
+  
+  "CDSAMEC CIA LTDA":
+    id: "402385"
+    name: "CDSAMEC CIA.LTDA."
+    confidence: 100
+    method: "SPECIFIC_TEXT_RULE"
+
+  "TCC TABABELA CARGOCENTER":
+    id: "400005"
+    name: "TABACARCEN S.A. TABABELA CARGO"
+    confidence: 100
+    method: "SPECIFIC_TEXT_RULE"
+
+  "ECUACENTAIR":
+    id: "400074"
+    name: "ECUACENTAIR CIA. LTDA"
+    confidence: 100
+    method: "SPECIFIC_TEXT_RULE"
+
+# -----------------------------------------------------------------------------
+# 3. CONFIGURACIÓN HEURÍSTICA
+# -----------------------------------------------------------------------------
+heuristic_rules:
+  # Tipos de transacción a procesar
+  target_trans_types:
+    - "TRANSFERENCIA DIRECTA"
+    - "TRANSFERENCIA SPI"
+    - "OTROS"
+    - "TRANSFERENCIA EXTERIOR"
+  
+  # ───────────────────────────────────────────────────────────────────────
+  # UMBRALES DE CONFIANZA (Ajustados para máxima precisión)
+  # ───────────────────────────────────────────────────────────────────────
+  thresholds:
+    # Histórico - Número exacto (máxima confianza)
+    historical_exact_match: 98
+    
+    # Histórico - Fuzzy por nombre (4 años de mapeo manual)
+    historical_fuzzy_match: 90
+    
+    # Maestro SAP - Fuzzy (base oficial)
+    master_fuzzy_match: 88
+    
+    # Portfolio - Fuzzy (último recurso, validación estricta)
+    portfolio_fuzzy_match: 90
+
+# -----------------------------------------------------------------------------
+# 4. REGLAS PARA DEPÓSITOS EN EFECTIVO (ESTRATEGIA V7)
+# -----------------------------------------------------------------------------
+cash_deposit_rules:
+  enabled: true
+  
+  # Parámetros técnicos del Algoritmo de Secuencias (V7)
+  strategy_v7_params:
+    time_gap_minutes: 5.0
+    seq_gap_threshold: 100
+    vip_purity_thresh: 0.65
+
+  # ═══════════════════════════════════════════════════════════════════════
+  # PATRÓN: URBAPARKING
+  # ═══════════════════════════════════════════════════════════════════════
+  parking:
+    customer_id: "400419"
+    customer_name: "URBAPARKING - EFECTIVO"
+  # ═══════════════════════════════════════════════════════════════════════
+  # PATRÓN: EFECTIVO - PENDIENTE CLASIFICAR
+  # ═══════════════════════════════════════════════════════════════════════
+  unknown_orphan:
+    customer_id: '999998'  # ← Diferente de VIP
+    customer_name: 'EFECTIVO - PENDIENTE CLASIFICAR'
+    confidence_score: 50
+
+  # ═══════════════════════════════════════════════════════════════════════
+  # PATRÓN: SALAS VIP
+  # ═══════════════════════════════════════════════════════════════════════
+  salas_vip:
+    customer_id: "999999"      
+    customer_name: "SALAS VIP - EFECTIVO" 
+    
+    # Precios exactos de los servicios VIP
+    known_prices: 
+      - 15.0
+      - 26.5
+      - 30.0
+      - 36.0
+      - 53.0
+      - 60.0
+      - 72.0
+      - 90.0
+      - 98.5
+      - 106.0
+      - 108.0
+      - 120.0
+      - 144.0
+      - 180.0
+      - 216.0
+      - 252.0
+      - 288.0
+      - 360.0
+      - 400.0
+    
+    price_tolerance: 0.05  # Tolerancia estricta por redondeos
+
+# =============================================================================
+# NOTAS DE CONFIGURACIÓN
+# =============================================================================
+# 
+# ESTRATEGIA DE BÚSQUEDA:
+# ----------------------
+# 1. Solo usa bank_ref_2 (NO mezcla con bank_description)
+# 2. Clasifica el dato: Número vs Nombre
+# 3. Prioridad de fuentes:
+#    - HISTÓRICO (4 años de validación manual)
+#    - MAESTRO SAP (base oficial)
+#    - PORTFOLIO (solo último recurso)
+# 
+# VALIDACIÓN DE DATOS:
+# -------------------
+# 1. Filtra histórico (solo registros válidos)
+# 2. Valida ID existe en maestro
+# 3. Detecta nombres basura
+# 4. Usa siempre nombre oficial del maestro
+# 5. Validación cruzada histórico-maestro
+# 
+# NORMALIZACIÓN:
+# -------------
+# - Figuras jurídicas: SAS, SA, CIA LTDA → normalizadas
+# - Core name extraction: remueve figuras jurídicas
+# - Smart scoring: 70% core + 30% full similarity
+# 
+# EXCLUSIONES:
+# -----------
+# Automáticamente excluye:
+# - "FIDEICOMISO MERC" (ajuste contable)
+# - "PAGO PROVEEDOR DE PRODUBANCO" (proveedor interno)
+# - "NOTA DE CREDITO" (ajuste)
+# - "RETENCION" (ajuste)
+# 
+# GARANTÍAS:
+# ---------
+# ✅ customer_id: Siempre existe en dim_customers
+# ✅ customer_name: Siempre nombre oficial del maestro SAP
+# ✅ Nunca asignará basura ("Credenciales - Seminarios")
+# ✅ Datos 100% validados y coherentes
+# 
+# MÉTODOS DE INFERENCIA:
+# ---------------------
+# - HISTORICAL_REF_MATCH: Número encontrado exacto
+# - HISTORICAL_FUZZY_MATCH_VALIDATED: Nombre histórico, validado
+# - HISTORICAL_FUZZY_MATCH_CLEANED: Nombre era basura, limpiado
+# - MASTER_FUZZY_MATCH: Encontrado directo en maestro
+# - PORTFOLIO_ACTIVE_MATCH_VALIDATED: Portfolio, validado con maestro
+# 
+# =============================================================================

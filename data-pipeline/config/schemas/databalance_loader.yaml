@@ -1,0 +1,64 @@
+# config/schemas/databalance_loader.yaml
+
+loader_name: "DATABALANCE"
+target_table: "raw_databalance"
+batch_prefix: "DB-"
+
+# Input
+input_subfolder: "01. Establecimientos/Databalance"
+
+# Output
+success_subfolder: "01. Establecimientos_Processed/Databalance_Processed"
+failed_subfolder: "01. Establecimientos_failed/Databalance_failed"
+
+# Configuración de Lectura
+header_row: 0
+
+# Mapeo Excel -> SQL
+column_mapping:
+  "TDTLF": "id_databalance"
+  "FECHA TRX": "fecha_voucher"
+  "FECHA CAPTURA": "fecha_captura"
+  "ESTADO": "estado"
+  "MID": "mid"
+  "TID": "tid"
+  "NOMBRE COMERCIO": "nombre_comercio"
+  "ALIAS": "alias"
+  "LOTE": "lote"
+  "REFERENCIA": "referencia"
+  "BIN": "bin"
+  "VALOR TOTAL": "valor_total"
+  "TIPO CREDITO": "tipo_credito"
+  "CUOTAS": "cuotas"
+  "AUTORIZACION": "autorizacion"
+  "TIPO TARJETA": "tipo_tarjeta"
+  "ADQUIRENTE": "adquirente"
+  "BASE 0": "base_0"
+  "BASE IMPONIBLE": "base_imponible"
+  "IVA": "iva"
+  "VALOR PAGADO": "valor_pagado"
+  "RET. FUENTE": "ret_fuente"
+  "RET. IVA": "ret_iva"
+  "COMISION": "comision"
+  "COMISION IVA": "comision_iva"
+  "COMP. RET. FUENTE": "comp_ret_fuente"
+  "COMP. RET. IVA": "comp_ret_iva"
+  "FECHA PAGO": "fecha_pago"
+  "SERVICIO": "servicio"
+  "PROPINA": "propina"
+  "INTERES": "interes"
+  "ICE": "ice"
+  "OTROS_IMPUESTOS": "otros_impuestos"
+  "MONTO_FIJO": "monto_fijo"
+  "DOCUMENTO_PAGO_NC": "documento_pago_nc"
+  "TRANSACCION": "transaccion"
+
+required_columns:
+  - "FECHA TRX"
+  - "TDTLF"
+  - "VALOR TOTAL"
+
+date_columns:
+  - "FECHA TRX"
+  - "FECHA CAPTURA"
+  - "FECHA PAGO"

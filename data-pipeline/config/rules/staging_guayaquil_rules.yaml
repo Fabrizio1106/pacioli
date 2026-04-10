@@ -1,0 +1,45 @@
+general:
+  source_name: "GUAYAQUIL"
+
+# 1. MAPEO DE COLUMNAS (RAW -> STAGING V2)
+column_mapping:
+  # Identificadores
+  batch_id: "batch_id"
+  hash_id: "hash_id_raw"
+  
+  # Fechas
+  fecha_transaccion: "fecha_venta"
+  fecha_liquida: "fecha_pago"
+  
+  # Claves
+  recap: "lote"
+  referencia: "referencia"
+  tarjeta: "tarjeta_enmascarada"
+  autorizacion: "autorizacion"
+  comercio: "comercio"
+  
+  # Valores (Nombres V2 en Inglés)
+  total: "amount_gross"          # <--- CORREGIDO
+  a_pagar: "amount_net"          # <--- CORREGIDO
+  impuesto: "impuesto_iva"
+  servicio: "otros_cargos"
+  
+  # Retenciones
+  retencion_iva: "amount_tax_iva" # <--- CORREGIDO
+  retencion_fte: "amount_tax_irf" # <--- CORREGIDO
+  
+  # Comisiones (OJO: Se sumarán en Python, no cambiar nombres aquí si el código las busca por nombre raw)
+  # El código busca 'comision_base' y 'comision_iva', así que mapeamos a esos nombres intermedios
+  comision: "comision_base"
+  comision_iva: "comision_iva"
+
+# 2. FILTROS
+filters:
+  column: "fecha_liquida"
+  
+# 3. LÓGICA DE NEGOCIO (GRUPOS)
+commerce_mapping:
+  "68893": "SALAS VIP"
+  "68894": "PARKING"
+  
+fixed_brand: "AMEX"

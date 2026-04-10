@@ -1,0 +1,15 @@
+general:
+  source_name: "PARKING_BREAKDOWN"
+
+# Filtro para extraer desde v2_stg_card_details
+extraction_filters:
+  establishment_name: "PARKING"   # Extraeremos todo lo que se llame PARKING
+  
+# Reglas de Agrupación
+aggregation:
+  group_by: ["settlement_date", "settlement_id", "batch_number", "brand"]
+
+# Configuración del Hash
+hash_config:
+  format: "{brand}_{batch}_{amount}"
+  decimal_precision: 2

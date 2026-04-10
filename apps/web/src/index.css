@@ -1,0 +1,332 @@
+@import "tailwindcss";
+@import url('https://fonts.googleapis.com/css2?family=Inter:ital,opsz,wght@0,14..32,300;0,14..32,400;0,14..32,500;0,14..32,600;0,14..32,700;1,14..32,400&display=swap');
+
+/* ═══════════════════════════════════════════════════════════════════════════
+   PACIOLI — Titanium & Solar Orange Theme
+   Identidad: Naranja Solar (#EA6A1A) sobre Titanio y Carbono
+   Estándar de legibilidad: Base 16px (Estilo Claude/Stripe)
+   ═══════════════════════════════════════════════════════════════════════════ */
+
+@theme {
+  /* ── Fuentes ─────────────────────────────────────────────────────────── */
+  --font-sans: 'Inter', system-ui, sans-serif;
+  --font-mono: 'Inter', system-ui, sans-serif;
+
+  /* ── Paleta Titanium & Solar Orange ──────────────────────────────────── */
+  --color-vault-base:      #121412;
+  --color-vault-sidebar:   #0D0F0D;
+  --color-vault-surface:   #1E211E;
+  --color-vault-surface2:  #262B26;
+  --color-vault-surface3:  #2E352E;
+  --color-vault-border:    #2D332D;
+  --color-vault-border2:   #3F473F;
+
+  --color-vault-orange:    #EA6A1A;
+  --color-vault-orange-soft:#FB923C;
+  --color-vault-orange-dim: rgba(234, 106, 26, 0.12);
+  --color-vault-orange-glow:rgba(234, 106, 26, 0.08);
+
+  --color-vault-green:     #10B981;
+  --color-vault-green-soft:#34D399;
+  --color-vault-green-glow:rgba(16, 185, 129, 0.08);
+
+  --color-vault-amber:     #F59E0B;
+  --color-vault-amber-soft:#FBBF24;
+  --color-vault-amber-dim: rgba(245, 158, 11, 0.08);
+
+  --color-vault-red:       #EF4444;
+  --color-vault-red-dim:   #EF444414;
+  --color-vault-blue:      #3B82F6;
+  --color-vault-blue-dim:  #3B82F614;
+
+  --color-vault-text:      #F3F4F6;
+  --color-vault-text2:     #9CA3AF;
+  --color-vault-text3:     #6B7280;
+  --color-vault-text-inv:  #FFFFFF;
+
+  --color-report-base:     #F8FAFC;
+  --color-report-surface:  #FFFFFF;
+  --color-report-border:   #E2E8F0;
+  --color-report-header:   #1E293B;
+  --color-report-text:     #0F172A;
+  --color-report-text2:    #475569;
+  --color-report-accent:   #EA6A1A;
+  --color-report-row-alt:  #F1F5F9;
+}
+
+/* ═══════════════════════════════════════════════════════════════════════════
+   BASE & SCALING
+   ═══════════════════════════════════════════════════════════════════════════ */
+*, *::before, *::after {
+  box-sizing: border-box;
+}
+
+html {
+  font-family:             var(--font-sans);
+  font-size:               16px;           /* ESTÁNDAR MODERNO (Stripe/Claude)   */
+  line-height:             1.5;
+  -webkit-font-smoothing:  antialiased;
+  -moz-osx-font-smoothing: grayscale;
+  text-rendering:          optimizeLegibility;
+}
+
+/* Compensación para que el Login siga viéndose a 15px (instrucción del usuario) */
+.login-page-root {
+  font-size: 0.9375rem !important; /* 15px exactos cuando la base es 16px */
+}
+
+body {
+  background-color: var(--color-vault-base);
+  color:            var(--color-vault-text);
+  margin:           0;
+  padding:          0;
+  min-height:       100vh;
+}
+
+/* Scrollbar personalizada */
+::-webkit-scrollbar       { width: 6px; height: 6px; }
+::-webkit-scrollbar-track { background: var(--color-vault-base); }
+::-webkit-scrollbar-thumb {
+  background:    var(--color-vault-border2);
+  border-radius: 10px;
+}
+::-webkit-scrollbar-thumb:hover {
+  background: var(--color-vault-orange-dim);
+}
+
+/* ═══════════════════════════════════════════════════════════════════════════
+   TIPOGRAFÍA MODERNA — Jerarquía Claude-style
+   ═══════════════════════════════════════════════════════════════════════════ */
+
+/* Texto de navegación (Sidebar) — Claro y directo */
+.text-nav   { font-size: 0.9375rem;  line-height: 1.5; font-weight: 500; }
+
+/* Texto de labels y badges — Legible (12px) */
+.text-label { font-size: 0.75rem;  line-height: 1.4; letter-spacing: 0.05em; text-transform: uppercase; font-weight: 600; }
+
+/* Texto de tablas y datos — Preciso (14px) */
+.text-data  { font-size: 0.875rem; line-height: 1.5; }
+
+/* Texto de títulos de página — Robusto */
+.text-page  { font-size: 1.125rem; font-weight: 700; line-height: 1.2; letter-spacing: -0.01em; }
+
+/* Monospace para números — Tabular nums para alineación perfecta */
+.font-numeric {
+  font-family:          var(--font-mono);
+  font-variant-numeric: tabular-nums;
+  font-size:            0.875rem;
+}
+
+/* ═══════════════════════════════════════════════════════════════════════════
+   MARCA
+   ═══════════════════════════════════════════════════════════════════════════ */
+.pacioli-logo {
+  font-family:    var(--font-sans);
+  font-weight:    800;
+  font-size:      0.85rem;
+  letter-spacing: 0.45em;
+  text-transform: uppercase;
+  color:          var(--color-vault-text);
+  line-height:    1;
+}
+
+.pacioli-subtitle {
+  font-family:    var(--font-sans);
+  font-weight:    500;
+  font-size:      0.68rem;
+  letter-spacing: 0.15em;
+  text-transform: uppercase;
+  color:          var(--color-vault-orange-soft);
+  line-height:    1;
+  margin-top:     6px;
+}
+
+/* ═══════════════════════════════════════════════════════════════════════════
+   BADGES DE ESTADO (Ajustados a 12px min)
+   ═══════════════════════════════════════════════════════════════════════════ */
+.badge {
+  display:        inline-flex;
+  align-items:    center;
+  padding:        0.25rem 0.65rem;
+  border-radius:  0.375rem;
+  font-size:      0.75rem;
+  font-weight:    600;
+  letter-spacing: 0.04em;
+  white-space:    nowrap;
+}
+
+.badge-pending {
+  background: var(--color-vault-amber-dim);
+  color:      var(--color-vault-amber-soft);
+  border:     1px solid rgba(245, 158, 11, 0.25);
+}
+.badge-matched {
+  background: var(--color-vault-green-glow);
+  color:      var(--color-vault-green-soft);
+  border:     1px solid rgba(16, 185, 129, 0.2);
+}
+
+/* ═══════════════════════════════════════════════════════════════════════════
+   BOTONES (Más aire visual)
+   ═══════════════════════════════════════════════════════════════════════════ */
+.btn {
+  display:         inline-flex;
+  align-items:     center;
+  justify-content: center;
+  gap:             0.5rem;
+  padding:         0.5rem 1.1rem;
+  border-radius:   0.5rem;
+  font-size:       0.875rem;
+  font-weight:     600;
+  font-family:     var(--font-sans);
+  cursor:          pointer;
+  transition:      all 0.15s ease;
+  border:          1px solid transparent;
+  white-space:     nowrap;
+  line-height:     1.5;
+}
+.btn:disabled { opacity: 0.45; cursor: not-allowed; }
+
+.btn-primary {
+  background:   var(--color-vault-orange);
+  color:        var(--color-vault-text-inv);
+  border-color: var(--color-vault-orange);
+  box-shadow:   0 1px 2px rgba(0,0,0,0.1);
+}
+.btn-primary:hover:not(:disabled) {
+  background:   var(--color-vault-orange-soft);
+  border-color: var(--color-vault-orange-soft);
+}
+
+/* ═══════════════════════════════════════════════════════════════════════════
+   INPUTS (Ajustados a 14px)
+   ═══════════════════════════════════════════════════════════════════════════ */
+.input {
+  background:    var(--color-vault-surface2);
+  border:        1px solid var(--color-vault-border);
+  border-radius: 0.5rem;
+  padding:       0.5rem 0.85rem;
+  font-size:     0.875rem;
+  font-family:   var(--font-sans);
+  color:         var(--color-vault-text);
+  outline:       none;
+  transition:    border-color 0.15s, box-shadow 0.15s;
+  width:         100%;
+}
+.input:focus {
+  border-color: var(--color-vault-orange);
+  box-shadow:   0 0 0 3px rgba(234, 106, 26, 0.1);
+}
+
+/* ═══════════════════════════════════════════════════════════════════════════
+   TABLAS (Más espacio para respirar)
+   ═══════════════════════════════════════════════════════════════════════════ */
+.data-table {
+  width:           100%;
+  border-collapse: collapse;
+  font-size:       0.875rem;
+}
+
+.data-table th {
+  padding:        0.75rem 1rem;
+  text-align:     left;
+  font-size:      0.75rem;
+  font-weight:    700;
+  letter-spacing: 0.06em;
+  text-transform: uppercase;
+  color:          var(--color-vault-text2);
+  background:     var(--color-vault-surface);
+  border-bottom:  1px solid var(--color-vault-border);
+  white-space:    nowrap;
+  position:       sticky;
+  top:            0;
+  z-index:        5;
+}
+
+.data-table td {
+  padding:       0.75rem 1rem;
+  border-bottom: 1px solid rgba(255, 255, 255, 0.03);
+  color:         var(--color-vault-text);
+  white-space:   nowrap;
+  height:        3rem; /* ~48px de altura de fila */
+}
+
+.data-table tr:hover td {
+  background: var(--color-vault-surface2);
+}
+
+.data-table td.numeric {
+  font-family: var(--font-mono);
+  text-align:  right;
+  color:       var(--color-vault-orange-soft);
+  font-weight: 600;
+}
+
+/* ═══════════════════════════════════════════════════════════════════════════
+   MODO REPORTS (Zinc & Steel Light)
+   ═══════════════════════════════════════════════════════════════════════════ */
+.reports-mode {
+  background-color: var(--color-report-base);
+  color:            var(--color-report-text);
+}
+
+.reports-mode .card {
+  background:   var(--color-report-surface);
+  border-color: var(--color-report-border);
+  box-shadow:   0 1px 3px rgba(0, 0, 0, 0.05);
+}
+
+.reports-mode .data-table th {
+  background:   var(--color-report-header);
+  color:        #E2E8F0;
+}
+
+.reports-mode .data-table td {
+  color:        var(--color-report-text);
+  border-color: var(--color-report-border);
+}
+
+.reports-mode .data-table tr:hover td {
+  background: var(--color-vault-orange-glow);
+}
+
+/* ═══════════════════════════════════════════════════════════════════════════
+   UTILIDADES
+   ═══════════════════════════════════════════════════════════════════════════ */
+.divider {
+  height:     1px;
+  background: var(--color-vault-border);
+  border:     none;
+  margin:     0;
+}
+
+.code-text {
+  font-family:   var(--font-mono);
+  font-size:     0.8rem;
+  color:         var(--color-vault-orange-soft);
+  background:    var(--color-vault-orange-glow);
+  padding:       0.15rem 0.45rem;
+  border-radius: 0.25rem;
+}
+
+@keyframes vault-pulse {
+  0%, 100% { opacity: 1; }
+  50%       { opacity: 0.4; }
+}
+
+.loading-pulse {
+  animation: vault-pulse 1.5s ease-in-out infinite;
+}
+
+input[type='checkbox'],
+input[type='radio'] {
+  accent-color: var(--color-vault-orange);
+  width: 1.1rem;
+  height: 1.1rem;
+  cursor: pointer;
+}
+
+.tabular {
+  font-variant-numeric: tabular-nums;
+  font-feature-settings: 'tnum';
+}

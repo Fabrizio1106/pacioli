@@ -1,0 +1,36 @@
+# config/schemas/manual_requests_loader.yaml
+
+loader_name: "manual_requests_loader"
+target_table: "raw_manual_requests"
+batch_prefix: "MR-"
+
+input_subfolder: "06. manual_requests"
+success_subfolder: "06. manual_requests_Processed"
+failed_subfolder: "06. manual_requests_failed"
+
+header_row: 1
+
+column_mapping:
+    "FECHA": "fecha"
+    "COD CLIENTE": "cod_cliente"
+    "CLIENTE": "cliente"
+    "VALOR": "valor"
+    "REF BANCO": "ref_banco"
+    "ESTADO_PAGO": "estado_pago"
+    "EMISION_FAC": "emision_fac"
+    "ESTADO_FAC": "estado_fac"
+    "DETALLE": "detalle"
+    "SOL. SAC": "sol_sac"
+    "DOC COMP.": "doc_comp"
+    "FACTURA": "factura"
+    "OBSERVACIONES": "observaciones"
+
+required_columns:
+  - "FECHA"
+  - "COD CLIENTE"
+  - "CLIENTE"
+  - "VALOR"
+  
+
+date_columns:
+  - "FECHA"

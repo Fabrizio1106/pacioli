@@ -1,0 +1,55 @@
+# config/rules/staging_diners_rules.yaml
+
+general:
+  source_name: "DINERS CLUB"
+
+# 1. MAPEO DE COLUMNAS (SQL Raw -> DataFrame Staging)
+column_mapping:
+  # Identificadores
+  batch_id: "batch_id"
+  hash_id: "hash_id_raw"
+  
+  # Fechas
+  fecha_del_vale: "fecha_venta"        # Fecha Consumo
+  fecha_del_pago: "fecha_pago"         # Fecha real del depósito
+  
+  # Claves
+  numero_recap_o_lote: "lote"
+  comprobante_de_pago: "comprobante_pago"
+  numero_tarjeta: "tarjeta_enmascarada"
+  codigo_unico: "codigo_establecimiento" # Auxiliar para calcular el local
+  numero_vale: "referencia"            # Usaremos el vale como referencia
+  
+# VALORES (Nuevos nombres)
+  valor_bruto_cuota: "amount_gross"
+  valor_comision_cuota: "amount_commission"
+  valor_retencion_iva_cuota: "amount_tax_iva" # Revisa si en tu raw es ccuota o cuota
+  valor_retencion_irf_cuota: "amount_tax_irf"
+  valor_pago_cuota: "amount_net"
+  
+# 2. REGLAS DE FILTRADO
+filters:
+  column: "estado_del_vale"
+  allow_values: ["PAGADO"]
+
+# 3. NORMALIZACIÓN DE MARCAS (Limpieza de basura)
+# La clave es el texto sucio (en mayúsculas para asegurar match), el valor es la marca limpia
+brand_normalization:
+  "DC": "DINERS CLUB"
+  "DCS": "DINERS CLUB"
+  
+  "ID": "VISA"
+  "ID-M": "VISA - MASTERCARD"
+  
+  "PI": "MASTERCARD"
+  "MC": "MASTERCARD"
+
+# 4. MAPEO DE ESTABLECIMIENTOS
+# Basado en codigo_unico
+establishment_mapping:
+  "1065236": "SALAS VIP"
+  "2252198": "SALAS VIP"
+  "2253022": "SALAS VIP"
+  "1070988": "PARKING"
+  "1551060": "ASISTENCIAS"
+

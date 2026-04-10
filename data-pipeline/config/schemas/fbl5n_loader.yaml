@@ -1,0 +1,52 @@
+# config/schemas/fbl5n_loader.yaml
+
+loader_name: "FBL5N"
+target_table: "raw_customer_portfolio"
+batch_prefix: "SAP-CP-"
+
+# Input
+input_subfolder: "02. FBL5N"
+
+# Output
+success_subfolder: "02. FBL5N_Processed"
+failed_subfolder: "02. FBL5N_failed"
+
+# Configuración de Lectura
+header_row: 0
+
+# Mapeo Excel -> SQL
+column_mapping:
+    "Cuenta": "cuenta"
+    "Nombre 1": "cliente"
+    "Referencia": "referencia"
+    "Asignación": "asignacion"
+    "Fecha de documento": "fecha_documento"
+    "Importe en moneda local": "importe"
+    "Fecha de pago": "fecha_de_pago"
+    "Días 1": "dias"
+    "Texto": "texto"
+    "Nº documento": "n_documento"
+    "Clase de documento": "clase_de_documento"
+    "Moneda local": "moneda_local"
+    "Cuenta de mayor": "cuenta_de_mayor"
+    "Doc.compensación": "doc_compensacion"
+    "Fecha compensación": "fecha_compensacion"
+    "Referencia a factura": "referencia_a_factura"
+
+
+
+required_columns:
+  - "Cuenta"
+  - "Nombre 1"
+  - "Referencia"
+  - "Asignación"
+  - "Importe en moneda local"
+  - "Fecha de pago"
+  - "Referencia a factura"
+
+
+date_columns:
+  - "Fecha de documento"
+  - "Fecha de pago"
+  - "Fecha compensación"
+  

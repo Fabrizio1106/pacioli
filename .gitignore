@@ -1,0 +1,56 @@
+# Python
+__pycache__/
+*.pyc
+*.pyd
+*.pyo
+.ipynb_checkpoints/
+*.ipynb
+.venv/
+venv/
+
+# Rust (la carpeta target/ de pacioli_core pesa cientos de MB)
+target/
+*.pdb
+*.dll.exp
+*.dll.lib
+
+# Node.js (lo necesitaremos pronto)
+node_modules/
+dist/
+.next/
+
+# Secretos — NUNCA al repositorio
+*.env
+
+# Archivos de sistema
+.DS_Store
+Thumbs.db
+
+# ──────────────────────────────────────────────────────────────────────────────
+
+# Ignorar carpetas de datos sensibles
+processed_files/
+
+# Ignorar documentación técnica privada
+documentation/
+
+# Ignorar archivos de Excel y archivos temporales
+*.xlsx
+*.xls
+*.csv
+
+# Pipeline — raw input data and logs
+data_raw/
+logs/
+
+# Outlook message files (bank statement source files)
+*.msg
+
+# Claude Code session cache
+.claude/
+
+# Log files
+*.log
+
+# SAP client master data
+data_master/

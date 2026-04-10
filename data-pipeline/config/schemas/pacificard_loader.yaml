@@ -1,0 +1,58 @@
+# config/schemas/pacificard_loader.yaml
+
+loader_name: "PACIFICARD"
+target_table: "raw_pacificard"
+batch_prefix: "TC-PCF-"
+
+# Input
+input_subfolder: "01. Establecimientos/Pacificard"
+
+# Output
+success_subfolder: "01. Establecimientos_Processed/Pacificard_Processed"
+failed_subfolder: "01. Establecimientos_failed/Pacificard_failed"
+
+# Configuración de Lectura
+header_row: 0
+
+# Mapeo de Asuntos de Correo -> Estaciones
+station_mapping:
+  "0011533418": "SALA VIP NACIONAL"
+  "0011538800": "SALA VIP INTERNACIONAL"
+  "0011552412": "PARKING"
+
+
+# Mapeo Excel -> SQL
+column_mapping:
+  "Fecha de Pago": "fecha_pago"
+  "Numero de Recap": "numero_recap"
+  "Recap 999999": "recap_999999"
+  "Tipo de Credito": "tipo_credito"
+  "Forma de Pago": "forma_pago"
+  "Numero de Cuenta": "numero_cuenta"
+  "Beneficiario": "beneficiario"
+  "Numero de Tarjeta": "numero_tarjeta"
+  "Consumo Tarifa 12%": "consumo_tarifa_12_pct"
+  "Consumo Tarifa 0%": "consumo_tarifa_0_pct"
+  "Valor IVA": "valor_iva"
+  "Valor ICE": "valor_ice"
+  "Valor No Comisionable": "valor_no_comisionable"
+  "Valor Transaccion": "valor_transaccion"
+  "Valor Comision": "valor_comision"
+  "Retencion IVA": "retencion_iva"
+  "Retencion Fuente": "retencion_fuente"
+  "Valor de Pago": "valor_de_pago"
+  "Cuota Pagada": "cuota_pagada"
+  "Valor Pendiente": "valor_pendiente"
+  "Comprob de Retencion": "comprob_de_retencion"
+  "Numero SRI autorizacion": "numero_sri_autorizacion"
+  "Fecha vigencia autorizacion": "fecha_vigencia_autorizacion"
+
+required_columns:
+ - "Fecha de Pago"
+ - "Numero de Recap"
+ - "Valor de Pago"
+
+# Para la detección de Gaps automática del BaseLoader
+date_columns:
+  - "Fecha de Pago"
+  

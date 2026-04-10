@@ -1,0 +1,47 @@
+general:
+  source_name: "PACIFICARD"
+  databalance_lookback_days: 7
+
+# 1. MAPEO PACIFICARD (RAW -> STAGING V2)
+column_mapping:
+  batch_id: "batch_id"
+  hash_id: "hash_id_raw"
+  estacion: "estacion_raw" 
+  fecha_pago: "fecha_pago"
+  numero_recap: "lote"
+  numero_tarjeta: "tarjeta_enmascarada"
+  
+  # VALORES (Nombres V2 en Inglés)
+  valor_transaccion: "amount_gross"      # <--- CORREGIDO
+  valor_comision: "amount_commission"    # <--- CORREGIDO
+  valor_iv: "impuesto_iva_venta"         # Esto suele ser IVA venta, no retención
+  retencion_iva: "amount_tax_iva"        # <--- CORREGIDO
+  retencion_fuente: "amount_tax_irf"     # <--- CORREGIDO
+  valor_de_pago: "amount_net"            # <--- CORREGIDO
+
+# 2. CONFIGURACIÓN DATABALANCE
+databalance:
+  filter_adquirente: "PACIFICARD"
+  columns:
+    lote: "lote"
+    bin: "bin"
+    valor_total: "valor_total"
+    referencia: "referencia"
+    autorizacion: "autorizacion"
+    fecha_trx: "fecha_venta"
+
+# 3. FILTROS
+filters:
+  require_columns: ["fecha_pago", "numero_recap"]
+
+# 4. PREFIJOS PARA SETTLEMENT ID
+payment_id_prefixes:
+  "SALA VIP INTERNACIONAL": "SVI"
+  "SALA VIP NACIONAL": "SVN"
+  "PARKING": "PARKING"
+
+# 5. GRUPOS
+group_mapping:
+  "SALA VIP INTERNACIONAL": "SALAS VIP"
+  "SALA VIP NACIONAL": "SALAS VIP"
+  "PARKING": "PARKING"

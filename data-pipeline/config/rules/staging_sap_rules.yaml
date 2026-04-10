@@ -1,0 +1,136 @@
+# UBICACIÓN: config/rules/staging_sap_rules.yaml
+
+# 1. MAPEO SQL: Raw -> Staging V2
+sql_mapping:
+  # Origen (Raw) -> Destino (Staging V2)
+  fecha_documento: doc_date
+  fecha_contable: posting_date
+  num_documento: doc_number
+  clase_documento: doc_type
+  asignacion: doc_reference
+  texto: sap_description
+  importe_ml: amount_total 
+  moneda_local: currency
+  
+  # Columnas calculadas/Enriquecidas
+  id_enlace_banco: bank_ref_1
+  banco_fecha_real: bank_date
+  banco_referencia2: bank_ref_2
+  banco_descripcion: bank_description
+  banco_oficina: bank_office_id
+  
+  # Categorización
+  tipo_transaccion: trans_type
+  categoria_global: global_category
+  marca_brand: brand
+  lote_recap: batch_number
+  
+  # Control
+  match_hash_key: match_hash_key
+  es_compensado_sap: is_compensated_sap
+  es_compensado_intraday: is_compensated_intraday
+
+# 2. REGLAS DE TAGGING (Prioridad descendente)
+  # --- TARJETAS DE CRÉDITO ---
+tagging_rules:
+  # 1. VISA (Procesada por Diners o similar)
+  # Lógica: Debe tener "DINERS" Y TAMBIÉN "SPI2"
+  - name: "TC - VISA (DINERS PROC)"
+    category: "RECAUDACION TC"
+    transaction_type: "LIQUIDACION TC"
+    brand: "VISA"
+    pattern: '(?i)^(?!.*\bBANCO\b)(?=.*DINERS CLUB DEL ECUADOR)(?=.*SPI2)'
+    search_columns: ["bank_description"]
+
+  # 2. DINERS (Diners puro)
+  # A veces Diners viene solo como "BANCO DINERS" sin SPI2, o con RECAPS
+  - name: "TC - DINERS CLUB"
+    category: "RECAUDACION TC"
+    transaction_type: "LIQUIDACION TC"
+    brand: "DINERS CLUB"
+    # Aquí buscamos explícitamente la marca. 
+    # Si ya cayó en la regla de arriba (VISA), no caerá aquí.
+    pattern: '(?i)(?=.*BANCO DINERS CLU)(?=.*RECAPS DINERS-DISCOVER)'
+    search_columns: ["bank_description"]
+
+  # 3. PACIFICARD
+  # Lógica: Que diga PACIFICARD (o LOTE) Y ADEMÁS diga SPI2
+  - name: "TC - PACIFICARD"
+    category: "RECAUDACION TC"
+    transaction_type: "LIQUIDACION TC"
+    brand: "PACIFICARD"
+    # Busca (PACIFICARD O LOTE) Y ADEMÁS (SPI2)
+    pattern: '(?i)(?=.*(PACIFICARD|LOTE))(?=.*SPI2)'
+    search_columns: ["bank_description"]
+    extract_metadata:
+      target_col: "batch_number"
+      regex: '(?i)LOTE-?\s*(\d+)'
+
+  # 4. AMEX (Banco Guayaquil)
+  # Lógica: Banco Guayaquil Y SPI2 (Asumiendo que BG procesa Amex)
+  - name: "TC - AMEX"
+    category: "RECAUDACION TC"
+    transaction_type: "LIQUIDACION TC"
+    brand: "AMEX"
+    pattern: '(?i)(?=.*BANCO DE GUAYAQUIL)(?=.*SPI2)'
+    search_columns: ["bank_description"]
+
+# 2. FINANCIEROS (Prioridad Media - Para no confundir intereses con transferencias)
+  - name: "INTERESES GANADOS"
+    category: "INGRESOS FINANCIEROS"
+    transaction_type: "INTERESES"
+    brand: "PRODUBANCO"
+    pattern: '(?i)(INTERESES|OVERNIGHT)'
+    search_columns: ["bank_description"]
+    condition: "amount_sign == '+'"
+
+  - name: "COMISIONES BANCARIAS"
+    category: "GASTOS BANCARIOS"
+    transaction_type: "COMISIONES"
+    brand: "PRODUBANCO"
+    pattern: '(?i)(TARIFA|COSTO|RETENCION|IMPUESTO)'
+    search_columns: ["bank_description"]
+    condition: "signo == '-'"
+
+  # 3. GENÉRICOS (Prioridad Baja - Solo si no cayó en los anteriores)
+  - name: "TRANSFERENCIA DEL EXTERIOR"
+    category: "RECAUDACION CLIENTES"
+    transaction_type: "TRANSFERENCIA EXTERIOR"
+    brand: "EXTERIOR"
+    pattern: '(?i)(DEL EXTERIOR)'
+    search_columns: ["bank_description"]
+
+  - name: "TRANSFERENCIA DIRECTA (MISMO BANCO)"
+    category: "RECAUDACION CLIENTES"
+    transaction_type: "TRANSFERENCIA DIRECTA"
+    brand: "PRODUBANCO"
+    pattern: '(?i)(TERCEROS BCA|PRODUBANCO|PAGO SERVICIOS VARIOS)'
+    search_columns: ["bank_description"]
+
+  - name: "TRANSFERENCIA INTERBANCARIA (SPI)"
+    category: "RECAUDACION CLIENTES"
+    transaction_type: "TRANSFERENCIA SPI"
+    brand: "GENERICO"
+    pattern: '(?i)(SPI2|TRANSF.*BCE|INTERBANCARIA|ROL)'
+    search_columns: ["bank_description"]
+
+  - name: "TRANSFERENCIAS A TERCEROS"
+    category: "RECAUDACION CLIENTES"
+    transaction_type: "TRANSFERENCIA SPI"
+    brand: "RANDOM BANK"
+    pattern: '(?i)(TRANSFERENCIAS A TERCEROS)'
+    search_columns: ["bank_description"]
+
+  - name: "DEPOSITO EFECTIVO"
+    category: "RECAUDACION VENTAS"
+    transaction_type: "DEPOSITO EFECTIVO"
+    brand: "CASH"
+    pattern: '(?i)(DEPOSITO.*EFECTIVO)'
+    search_columns: ["bank_description"]
+
+  - name: "DEPOSITO CHEQUE"
+    category: "RECAUDACION VENTAS"
+    transaction_type: "DEPOSITO CHEQUE"
+    brand: "CHECK"
+    pattern: '(?i)(DEPOSITO.*CHEQUE)'
+    search_columns: ["bank_description"]

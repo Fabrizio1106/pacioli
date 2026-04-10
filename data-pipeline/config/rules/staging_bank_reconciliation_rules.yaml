@@ -1,0 +1,52 @@
+# Reglas para el Procesador de Conciliación Bancaria (Staging V18)
+
+# --- CONFIGURACIÓN GENERAL ---
+target_trans_type: "LIQUIDACION TC" # Para el proceso legacy de tarjetas
+tolerance_threshold: 0.05
+
+# --- REGLAS DE NEGOCIO (BUSINESS LOGIC) ---
+business_logic:
+  # Establecimientos donde ignoramos el conteo de vouchers (Lotes vs Individual)
+  ignore_voucher_count_for:
+    - "PARKING"
+  
+  # Shadow Matching: Razones para cierre automático
+  shadow_match_reasons:
+    sap_closed: "CLOSED_IN_SOURCE_SAP"
+    intraday_offset: "AUTO_OFFSETTING_ENTRY"
+  
+  # Configuración URBAPARKING (Caso Greedy)
+  parking_special_handling:
+    customer_id: "400419"
+    
+  # Exclusiones de Cartera (Notificaciones)
+  portfolio_exclusions:
+    - "N2-"
+    - "N3-"
+    - "N4-"
+
+# --- ESTADOS DEL SISTEMA ---
+status:
+  matched: "MATCHED"
+  matched_manual: "MATCHED_MANUAL"
+  review: "REVIEW"
+  pending: "PENDING"
+  partial: "PARTIAL_MATCH"
+
+# --- RAZONES DE CONCILIACIÓN (AUDIT TRAIL) ---
+reasons:
+  # Tarjetas
+  perfect_match: "PERFECT_MATCH"
+  penny_adjustment: "PENNY_ADJUSTMENT"
+  split_batch: "SPLIT_BATCH_MATCH"
+  count_mismatch: "VOUCHER_COUNT_MISMATCH"
+  amount_mismatch: "AMOUNT_MISMATCH"
+  no_portfolio: "NO_PORTFOLIO_DATA"
+  orphan: "ORPHAN_ROW"
+  
+  # Nuevos (Cartera General)
+  fifo_match: "FIFO_INVOICE_MATCH"
+  parking_match: "PARKING_BATCH_MATCH"
+  human_validation: "REQUIRES_HUMAN_VALIDATION"
+  global_match: "GLOBAL_AMOUNT_MATCH_REVIEW"
+  ambiguous: "AMBIGUOUS_MATCH"

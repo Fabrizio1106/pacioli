@@ -1,0 +1,76 @@
+# config/schemas/diners_club_loader.yaml
+
+loader_name: "DINERS_CLUB"
+target_table: "raw_diners_club"
+batch_prefix: "TC-DC-"
+
+# Input
+input_subfolder: "01. Establecimientos/Diners_Club"
+
+# Output
+success_subfolder: "01. Establecimientos_Processed/Diners_Club_Processed"
+failed_subfolder: "01. Establecimientos_failed/Diners_Club_failed"
+
+# Configuración de Lectura
+header_row: 0
+
+# Mapeo Excel -> SQL
+column_mapping:
+    "Ruc comercio": "ruc_comercio"
+    "Fecha del vale": "fecha_del_vale"
+    "Fecha facturación": "fecha_facturacion"
+    "Fecha del pago": "fecha_del_pago"
+    "Código Único": "codigo_unico"
+    "Nombre del comercio": "nombre_del_comercio"
+    "Canal de Captura": "canal_de_captura"
+    "Marca": "marca"
+    "Número Recap o Lote": "numero_recap_o_lote"
+    "Número vale": "numero_vale"
+    "Número Tarjeta": "numero_tarjeta"
+    "Tipo crédito": "tipo_credito"
+    "Valor Cuota Consumo": "valor_cuota_consumo"
+    "Valor IVA de Cuota": "valor_iva_de_cuota"
+    "Valor Otros Impuestos Cuota": "valor_otros_impuestos_cuota"
+    "Valor Propina Cuota": "valor_propina_cuota"
+    "Valor ICE Cuota": "valor_ice_cuota"
+    "Valor Intereses Socio Cuota": "valor_intereses_socio_cuota"
+    "Valor Bruto Cuota": "valor_bruto_cuota"
+    "Valor Comisión Cuota": "valor_comision_cuota"
+    "Porcentaje comisión": "porcentaje_comision"
+    "Valor  Retención  IVA Cuota": "valor_retencion_iva_cuota"
+    "Valor Retención IRF Cuota": "valor_retencion_irf_cuota"
+    "Valor Pago Cuota": "valor_pago_cuota"
+    "Cuotas trasladadas (Pagadas)": "cuotas_trasladadas"
+    "Total cuotas": "total_cuotas"
+    "Valor Total Consumo": "valor_total_consumo"
+    "Valor Total IVA": "valor_total_iva"
+    "Valor Total otros impuestos": "valor_total_otros_impuestos"
+    "Valor Total de la propina": "valor_total_de_la_propina"
+    "Valor Total del ICE": "valor_total_del_ice"
+    "Valor Total Bruto": "valor_total_bruto"
+    "Valor Total Comisión": "valor_total_comision"
+    "Valor  Total Retención  IVA": "valor_total_retencion_iva"
+    "Valor Total Retención IRF": "valor_total_retencion_irf"
+    "Valor Total Pago": "valor_total_pago"
+    "Valor pendiente del vale (total)": "valor_pendiente_del_vale"
+    "Comprobante retención": "comprobante_retencion"
+    "Comprobante de pago": "comprobante_de_pago"
+    "Factura": "factura"
+    "Estado del Vale": "estado_del_vale"
+
+
+required_columns:
+  - "Fecha del pago"
+  - "Código Único"
+  - "Marca"
+  - "Número Recap o Lote"
+  - "Nombre del comercio"
+  - "Número vale"
+  - "Número Tarjeta"
+  - "Valor Comisión Cuota"
+  - "Valor  Retención  IVA Cuota"
+  - "Valor Pago Cuota"
+  - "Comprobante de pago"
+
+date_columns:
+  - "Fecha del vale"

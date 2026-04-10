@@ -1,0 +1,63 @@
+# config/schemas/guayaquil_loader.yaml
+
+loader_name: "GUAYAQUIL"
+target_table: "raw_guayaquil"
+batch_prefix: "TC-AMEX-"
+
+# Input
+input_subfolder: "01. Establecimientos/Guayaquil"
+
+# Output
+success_subfolder: "01. Establecimientos_Processed/Guayaquil_Processed"
+failed_subfolder: "01. Establecimientos_failed/Guayaquil_failed"
+
+# Configuración de Lectura
+header_row: 0
+
+# Mapeo Excel -> SQL
+column_mapping:
+    "Moneda": "moneda"
+    "Recap": "recap"
+    "Referencia": "referencia"
+    "Fecha Transaccion": "fecha_transaccion"
+    "RUC": "ruc"
+    "Comercio": "comercio"
+    "Comercio Descripcion": "comercio_descripcion"
+    "Razon Social": "razon_social"
+    "Tarjeta": "tarjeta"
+    "Neto": "neto"
+    "Impuesto": "impuesto"
+    "Servicio": "servicio"
+    "Total": "total"
+    "Comision": "comision"
+    "Comision IVA": "comision_iva"
+    "Retencion FTE": "retencion_fte"
+    "Retencion IVA": "retencion_iva"
+    "A Pagar": "a_pagar"
+    "Tipo Transaccion": "tipo_transaccion"
+    "Tipo Diferido": "tipo_diferido"
+    "Tipo Documento": "tipo_documento"
+    "Marca Descripcion": "marca_descripcion"
+    "Banco": "banco"
+    "Tipo Cuenta Comercio": "tipo_cuenta_comercio"
+    "Cuenta Comercio": "cuenta_comercio"
+    "Fecha Liquida": "fecha_liquida"
+    "Autorizacion": "autorizacion"
+    "Origen": "origen"
+
+
+required_columns:
+  - "Recap"
+  - "Referencia"
+  - "Comercio Descripcion"
+  - "Tarjeta"
+  - "Neto"
+  - "A Pagar"
+  - "Fecha Liquida"
+
+
+date_columns:
+  - "Fecha Transaccion"
+  - "Fecha Liquida"
+
+  

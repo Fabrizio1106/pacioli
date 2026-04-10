@@ -1,0 +1,11 @@
+# CONFIGURACIÓN DE PROCESAMIENTO: SOLICITUDES MANUALES
+description: "Reglas de normalización para la ingesta de Excel manual"
+
+# Lógica de explosión (Multi-referencia)
+split_logic:
+  enabled: true
+  separator: "/"
+
+# Lógica de limpieza
+clean_logic:
+  strip_chars: " -"  # Espacios y guiones en los extremos

@@ -1,0 +1,5 @@
+pg_dump -U postgres -d pacioli_db -n biq_auth -s --clean --if-exists --no-owner --no-privileges -f biq_auth_schema.sql
+pg_dump -U postgres -d pacioli_db -n biq_gold -s --clean --if-exists --no-owner --no-privileges -f biq_gold_schema.sql
+pg_dump -U postgres -d pacioli_db -n biq_config -s --clean --if-exists --no-owner --no-privileges -f biq_config_schema.sql
+pg_dump -U postgres -d pacioli_db -n biq_raw -s --clean --if-exists --no-owner --no-privileges -f biq_raw_schema.sql
+pg_dump -U postgres -d pacioli_db -n biq_stg -s --clean --if-exists --no-owner --no-privileges -f biq_stg_schema.sql

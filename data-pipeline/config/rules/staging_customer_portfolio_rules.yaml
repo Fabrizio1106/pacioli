@@ -1,0 +1,90 @@
+# UBICACIÓN: config/rules/staging_customer_portfolio_rules.yaml
+
+general:
+  source_name: "SAP_FBL5N"
+
+# 1. MAPEO EXACTO (Tu Tabla RAW -> Código Python V2)
+# Izquierda: Nombres en tu tabla 'raw_customer_portfolio'
+# Derecha: Nombres que espera el 'CustomerPortfolioProcessor'
+column_mapping:
+  # Identificadores
+  hash_id: "accounting_doc"
+  referencia: "sap_doc_number"
+  cuenta: "customer_code"           # <--- AJUSTADO (Antes cuenta_cliente)
+  cliente: "customer_name"          # <--- AJUSTADO (Antes cliente_nombre)
+  asignacion: "assignment"
+  referencia_a_factura: "invoice_ref"
+  
+  # Fechas
+  fecha_documento: "doc_date"
+  fecha_de_pago: "due_date"         # <--- AJUSTADO (Antes fecha_vencimiento)
+  
+  # Valores
+  importe: "amount_outstanding"     # <--- AJUSTADO (Antes importe_pendiente)
+  moneda_local: "currency"          # <--- AJUSTADO (Antes moneda)
+
+# 2. MAPEO WEBPOS (Referencia para enriquecimiento)
+webpos_mapping:
+  lote: "enrich_batch"
+  numero_de_referencia: "enrich_ref"
+  total: "payment_amount_temp" 
+
+# 3. PREFIJOS DE MARCA (Para generar hashes DVM_... / AMX_...)
+brand_prefixes:
+  "DINERS CLUB": "DVM"
+  "DINERS NACIONAL": 'DVM'
+  "VISA": "DVM"
+  "MASTERCARD": "DVM"
+  "DISCOVER": "DVM"
+  "TITANIUM": "DVM"
+  "AMEX": "AMX"
+  "AMERICAN EXPRESS": "AMX"
+  "PACIFICARD DESCUENTO": "PCF"
+  "PACIFICARD CONVENIO": "PCF"
+
+# 4. REGLAS PARKING (Bank-Driven Strategy V2)
+parking_rules:
+  # Cuenta Contable específica donde se busca la deuda de Parking
+  target_gl_account: "1120114029"
+
+  # Clientes SAP que pertenecen al grupo Parking (Filtro de seguridad)
+  parking_clients:
+    - "400487" # DINNERS CLUB ECUADOR
+    - "400492" # DISCOVER
+    - "400490" # AMEX
+    - "400489" # MASTERCARD PACIFICO
+
+  # Regex para extraer Lote y Letra de 'asignacion' (Ej: PE: 123-LOTE-LETRA)
+  regex_pattern: 'PE:\s*\d+-([^-]+)-([A-Za-z]+)'
+
+  # Mapeo de Letra a Marca Completa
+  letter_to_brand:
+    "D": "DINERS CLUB"
+    "V": "VISA"
+    "M": "VISA - MASTERCARD"
+    "DCS": "DINERS CLUB"
+    "A": "AMEX"
+    "PCF": "PACIFICARD"
+
+# 5. REGLAS CASCADA VIP (ACTUALIZADO V20 - Statistical Error Probability)
+vip_cascade_rules:
+  execution_order:
+    - "EXACT_HASH"                # Capa 0: Determinismo Absoluto
+    - "EXACT_BATCH_REF_WRONG_AMT" # Capa 1: Lote y Ref perfectos, error de cobro (95%)
+    - "EXACT_BATCH_AMT_WRONG_REF" # Capa 2: Lote y Monto perfectos, typo en Ref (85%)
+    - "EXACT_REF_AMT_WRONG_BATCH" # Capa 3: Ref y Monto perfectos, typo en Lote (85%)
+    - "SWAPPED_BATCH_REF"         # Capa 4: Invirtieron Lote y Ref (80%)
+    - "SAME_BATCH_SAME_AMT"       # Capa 5: Lote y Monto, sin ref válida (75%)
+    - "SAME_AMT_SAME_BRAND"       # Capa 6: Monto y Marca (Rescate de riesgo medio) (60%)
+    - "RESCUE_BY_AMOUNT_ONLY"     # Capa 7: Solo monto (Último recurso, alto riesgo) (40%)
+
+  # Configuración específica
+  amount_tolerance:         # <--- NUEVA CONFIG
+    threshold: 0.05
+
+  fuzzy_typos:
+    min_similarity: 85
+    max_permutations: true
+
+  partial_data:
+    require_unique: true

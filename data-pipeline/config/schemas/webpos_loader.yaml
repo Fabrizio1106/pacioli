@@ -1,0 +1,40 @@
+# config/schemas/webpos_loader.yaml
+
+loader_name: "WEBPOS"
+target_table: "raw_webpos"
+batch_prefix: "WP-FACT-"
+
+input_subfolder: "03. WebPos"
+success_subfolder: "03. WebPos_Processed"
+failed_subfolder: "03. WebPos_failed"
+
+header_row: 5
+
+column_mapping:
+    "TIPO_PAGO": "tipo_pago"
+    "FECHA": "fecha"
+    "HORA": "hora"
+    "NOTA_DE_CREDITO": "nota_de_credito"
+    "FACTURA": "factura"
+    "CLIENTE": "cliente"
+    "RUC_CLIENTE": "ruc_cliente"
+    "LOTE": "lote"
+    "TARJETA_VIP": "tarjeta_vip"
+    "NUMERO_DE_REFERENCIA": "numero_de_referencia"
+    "REFERENCIA_DE_PAGO": "referencia_de_pago"
+    "USUARIO": "usuario"
+    "TOTAL": "total"
+    "CLAVE_DE_ACCESO": "clave_de_acceso"
+    "AUTORIZACION": "autorizacion"
+    "ESTACION": "estacion"
+
+required_columns:
+  - "TIPO_PAGO"
+  - "FECHA"
+  - "FACTURA"
+  - "LOTE"
+  - "REFERENCIA_DE_PAGO"
+  - "TOTAL"
+
+date_columns:
+  - "FECHA"
